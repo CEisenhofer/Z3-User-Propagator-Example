@@ -3,26 +3,32 @@
 #include <stack>
 #include <unordered_map>
 #include <vector>
-#include <c++/z3++.h>
+#include <z3++.h>
 
 using namespace std::string_literals;
 using std::to_string;
 
-void _fixed(unsigned id, z3::expr const& e) {
-	std::cout << "Fixed" << std::endl;
-}
-
-void _final() {
-	std::cout << "Final" << std::endl;
-}
 
 struct user_propagator : z3::user_propagator_base {
 
 	std::vector<int> lim;
 	std::vector<int> trail;
+        std::vector<unsigned> ids;
+        std::vector<z3::expr> values;
+
+        void _final() {
+            std::cout << "Final" << std::endl;
+#if 0
+            // for some reason this doesn't work:
+            for (auto & e : values)
+                std::cout << "value: " << e << "\n";
+#endif
+            this->conflict(ids.size(), ids.data());
+        }
 
 	void _fixed(unsigned id, z3::expr const& e) {
-		std::cout << "Fixed" << std::endl;
+            std::cout << "Fixed " << id << " = " << e << std::endl;
+            values[id] = e;
 	}
 
 	user_propagator(z3::solver* s) : user_propagator_base(s) {
@@ -38,17 +44,17 @@ struct user_propagator : z3::user_propagator_base {
 		this->register_final(f2);
 	}
 
-	void push() {
+	void push() override {
 		std::cout << "Push" << std::endl;
 		lim.push_back(trail.size());
 	}
-	void pop(unsigned num_scopes) {
+	void pop(unsigned num_scopes) override {
 		std::cout << "Pop" << std::endl;
 		int lim_sz = lim.size() - num_scopes;
 		lim = std::vector<int>(lim.begin(), lim.begin() + lim_sz);
 	}
 
-	user_propagator_base* fresh(Z3_context ctx) {
+	user_propagator_base* fresh(Z3_context ctx) override {
 		std::cout << "Fresh" << std::endl;
 		return this;
 	}
@@ -72,7 +78,7 @@ int main() {
 	std::vector<int*> solutions;
 
 	z3::context context;
-	z3::solver solver(context);
+	z3::solver solver(context, z3::solver::simple());
 
 	std::vector<z3::expr> queens;
 
@@ -85,7 +91,7 @@ int main() {
 
 	z3::expr_vector distinct(context);
 	for (int i = 0; i < num; i++) {
-		distinct.push_back(queens[i]);
+            distinct.push_back(queens[i]);
 	}
 
 	solver.add(z3::distinct(distinct));
@@ -108,6 +114,13 @@ int main() {
 	// std::cout << "Encoding: " << solver.to_smt2() << std::endl;
 
 	user_propagator propagator(&solver);
+
+        for (auto q : queens) {
+            auto id = propagator.add(q);
+            std::cout << "id " << id << " -> " << q << "\n";
+            propagator.ids.push_back(id);
+            propagator.values.push_back(q);
+        }
 
 	int solutionId = 1;
 
