@@ -7,6 +7,8 @@
 #include <unordered_set>
 #include <vector>
 #include <cstring>
+// Add the Z3 API location to the compilers additional include directories
+// Furthermore add the Z3 library
 #include <c++/z3++.h>
 
 using namespace std::string_literals;
@@ -14,8 +16,7 @@ using namespace std::chrono;
 using std::to_string;
 
 #define QUEEN
-//#define DEBUG_LOG
-#define REPETITIONS 10
+#define REPETITIONS 5
 
 #ifndef QUEEN
 #define ROOK
@@ -23,20 +24,14 @@ using std::to_string;
 
 #define SIZE(x) std::extent<decltype(x)>::value
 
-#if !defined(NDEBUG) || defined(_DEBUG)
+#if LOG
 #define WriteEmptyLine std::cout << std::endl
 #define WriteLine(x) std::cout << (x) << std::endl
 #define Write(x) std::cout << x
-#ifdef IS_LOG
-#define Log(x) std::cout << (x) << std::endl;
-#else
-#define Log(x)
-#endif
 #else
 #define WriteEmptyLine
 #define WriteLine(x)
 #define Write(x)
-#define Log(x)
 #endif
 
 class model {
@@ -125,38 +120,6 @@ public:
         return solutionId - 1;
     }
 
-    bool checkModel() {
-        for (unsigned int id : fixedValues) {
-            unsigned int queenId = (*id_mapping)[id];
-            unsigned int queenPos = (*currentModel)[queenId];
-
-            if (queenPos < 0 || queenPos >= board) {
-                return false;
-            }
-
-            for (unsigned int fixed : fixedValues) {
-                unsigned int otherId = (*id_mapping)[fixed];
-                unsigned int otherPos = (*currentModel)[otherId];
-
-                if (otherId <= queenId) {
-                    continue;
-                }
-
-                if (queenPos == otherPos) {
-                    return false;
-                }
-#ifdef QUEEN
-                int diffY = abs((int) queenId - (int) otherId);
-                int diffX = abs((int) queenPos - (int) otherPos);
-                if (diffX == diffY) {
-                    return false;
-                }
-#endif
-            }
-        }
-        return true;
-    }
-
     void final() {
         this->conflict(fixedValues.size(), fixedValues.data());
         if (modelSet.find(*currentModel) != modelSet.end()) {
@@ -167,18 +130,11 @@ public:
         solutionId++;
         for (int i = 0; i < fixedValues.size(); i++) {
             unsigned int id = fixedValues[i];
-            WriteLine("q" << (*id_mapping)[id] << " = " << (*currentModel)[id]);
+            WriteLine("q" + std::to_string((*id_mapping)[id]) + " = " + std::to_string((*currentModel)[id]));
         }
         modelSet.insert(*currentModel);
         WriteEmptyLine;
 
-#ifdef DEBUG_LOG
-        if (!checkModel()) {
-            std::cout << "Generated invalid model!" << std::endl;
-            exit(10);
-        }
-#endif
-        Log("Copy previous model");
         currentModel = currentModel->clone();
     }
 
@@ -187,7 +143,6 @@ public:
     }
 
     virtual void fixed(unsigned int id, z3::expr const &e) {
-        Log("Fixed " << id);
         fixedValues.push_back(id);
         unsigned int value = bvToInt(e);
         currentModel->set((*id_mapping)[id], value);
@@ -196,11 +151,10 @@ public:
     user_propagator(z3::solver *s, std::unordered_map<unsigned int, unsigned int> *idMapping, int board)
             : user_propagator_base(s), id_mapping(idMapping), board(board) {
 
-        Log("New empty model created");
         currentModel = new model(board);
 
-        std::function<void(unsigned, z3::expr const &)> f1 = [this](auto &&PH1, auto &&PH2) {
-            fixed(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+        std::function<void(unsigned, z3::expr const &)> f1 = [this](unsigned id, z3::expr e) {
+            fixed(id, e);
         };
         std::function<void()> f2 = [this]() {
             final();
@@ -210,23 +164,19 @@ public:
     }
 
     ~user_propagator() {
-        Log("Deleting everything");
         delete currentModel;
         currentModel = nullptr;
     }
 
     void push() override {
-        Log("Push");
         fixedCnt.push(fixedValues.size());
     }
 
     void pop(unsigned num_scopes) override {
-        Log("Pop: " << num_scopes);
         for (int i = 0; i < num_scopes; i++) {
             int lastCnt = fixedCnt.top();
             fixedCnt.pop();
             for (int j = fixedValues.size(); j > lastCnt; j--) {
-                Log("Resetting: " << j - 1);
                 currentModel->set(fixedValues[j - 1], -1);
             }
             fixedValues.resize(lastCnt);
@@ -245,7 +195,7 @@ public:
         unsigned int queenPos = bvToInt(e);
 
         if (queenPos >= board) {
-            conflict(1, &id);
+            this->conflict(1, &id);
             return;
         }
 
@@ -309,8 +259,8 @@ void createConstraints(z3::context &context, z3::solver &solver, const std::vect
     }
 
     z3::expr_vector distinct(context);
-    for (int i = 0; i < queens.size(); i++) {
-        distinct.push_back(queens[i]);
+    for (const z3::expr & queen : queens) {
+        distinct.push_back(queen);
     }
 
     solver.add(z3::distinct(distinct));
@@ -322,20 +272,6 @@ void createConstraints(z3::context &context, z3::solver &solver, const std::vect
             solver.add((j - i) != (queens[i] - queens[j]));
         }
     }
-    /*for (int i = 0; i < queens.size(); i++) {
-        for (int j = i - 1, k = -1; j >= 0; j--, k--) {
-            solver.add(queens[i] + k != queens[j]);
-        }
-        for (int j = i - 1, k = 1; j >= 0; j--, k++) {
-            solver.add(queens[i] + k != queens[j]);
-        }
-        for (int j = i + 1, k = -1; j < queens.size(); j++, k--) {
-            solver.add(queens[i] + k != queens[j]);
-        }
-        for (int j = i + 1, k = 1; j < queens.size(); j++, k++) {
-            solver.add(queens[i] + k != queens[j]);
-        }
-    }*/
 #endif
 }
 
@@ -358,14 +294,14 @@ int test01(int num, bool simple) {
 
         z3::model model = solver.get_model();
 
-        WriteLine("Model #" << solutionId << ":");
+        WriteLine("Model #" + std::to_string(solutionId) + ":");
         solutionId++;
 
         z3::expr_vector blocking(context);
 
         for (int i = 0; i < num; i++) {
             z3::expr eval = model.eval(queens[i]);
-            WriteLine("q" << i + 1 << " = " << eval.get_numeral_int());
+            WriteLine(("q" + std::to_string(i + 1) + " = " + std::to_string(eval.get_numeral_int())));
             blocking.push_back(queens[i] != eval);
         }
 
@@ -424,21 +360,9 @@ inline int test3(int num) {
 
 int main() {
 
-    while (true) {
-        std::cout << "Size (n x n): ";
+    for (int num = 4; num <= 12; num++) {
 
-        std::string line;
-        std::getline(std::cin, line);
-
-        char *endptr;
-        int num = strtol(line.c_str(), &endptr, 10);
-
-        if (endptr == nullptr || endptr == line.c_str() || num < 4) {
-            std::cout << "Invalid number: " << line << std::endl;
-            exit(1);
-        }
-
-        std::cout << std::endl;
+        std::cout << "num = " << num << ":\n" << std::endl;
 
         unsigned int seed = high_resolution_clock::now().time_since_epoch().count();
         const char *testName[] =
@@ -458,7 +382,7 @@ int main() {
         double timeResults[REPETITIONS * SIZE(permutation)];
 
         for (int rep = 0; rep < REPETITIONS; rep++) {
-            // Random order
+            // Execute strategies in a randomised order
             std::shuffle(&permutation[0], &permutation[SIZE(permutation) - 1], std::default_random_engine(seed));
 
             for (int i : permutation) {
