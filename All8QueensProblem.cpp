@@ -18,10 +18,6 @@ using std::to_string;
 #define QUEEN
 #define REPETITIONS 5
 
-#ifndef QUEEN
-#define ROOK
-#endif
-
 #define SIZE(x) std::extent<decltype(x)>::value
 
 #if LOG
@@ -39,9 +35,9 @@ class model {
 public:
 
     unsigned int *values;
-    int cnt;
+    unsigned cnt;
 
-    model(int cnt) : cnt(cnt), values(nullptr) {
+    model(unsigned cnt) : cnt(cnt), values(nullptr) {
         values = (unsigned int *) malloc(sizeof(unsigned int) * cnt);
     }
 
@@ -62,7 +58,7 @@ public:
         if (cnt != other.cnt) {
             return false;
         }
-        for (int i = 0; i < cnt; i++) {
+        for (unsigned i = 0; i < cnt; i++) {
             if (values[i] != other.values[i]) {
                 return false;
             }
@@ -74,18 +70,9 @@ public:
         return !this->operator==(other);
     }
 
-    std::string toString() {
-        std::stringstream out;
-        for (int i = 0; i < cnt; i++) {
-            out << "q" << i + 1 << " = " << values[i] << "\n";
-        }
-
-        return out.str();
-    }
-
-    model *clone() {
+    model *clone() const {
         model *newModel = new model(cnt);
-        memcpy(newModel->values, values, sizeof(unsigned int) * cnt);
+        memcpy(newModel->values, values, sizeof(unsigned) * cnt);
         return newModel;
     }
 };
@@ -93,7 +80,7 @@ public:
 struct model_hash_function {
     std::size_t operator()(const model &m) const {
         size_t hash = 0;
-        for (int i = 0; i < m.cnt; i++) {
+        for (unsigned i = 0; i < m.cnt; i++) {
             hash *= m.cnt;
             hash += m.values[i];
         }
@@ -109,8 +96,8 @@ protected:
     model *currentModel;
     std::unordered_set<model, model_hash_function> modelSet;
     std::vector<unsigned int> fixedValues;
-    std::stack<int> fixedCnt;
-    int board;
+    std::stack<unsigned> fixedCnt;
+    unsigned board;
 
     int solutionId = 1;
 
@@ -120,8 +107,8 @@ public:
         return solutionId - 1;
     }
 
-    void final() {
-        this->conflict(fixedValues.size(), fixedValues.data());
+    void final() final {
+        this->conflict((unsigned) fixedValues.size(), fixedValues.data());
         if (modelSet.find(*currentModel) != modelSet.end()) {
             WriteLine("Got already computed model");
             return;
@@ -130,7 +117,7 @@ public:
         solutionId++;
         for (int i = 0; i < fixedValues.size(); i++) {
             unsigned int id = fixedValues[i];
-            WriteLine("q" + std::to_string((*id_mapping)[id]) + " = " + std::to_string((*currentModel)[id]));
+            WriteLine("q" + to_string((*id_mapping)[id]) + " = " + to_string((*currentModel)[id]));
         }
         modelSet.insert(*currentModel);
         WriteEmptyLine;
@@ -142,25 +129,19 @@ public:
         return (unsigned int) e.get_numeral_int();
     }
 
-    virtual void fixed(unsigned int id, z3::expr const &e) {
+    void fixed(unsigned id, z3::expr const &e) override {
         fixedValues.push_back(id);
         unsigned int value = bvToInt(e);
         currentModel->set((*id_mapping)[id], value);
     }
 
-    user_propagator(z3::solver *s, std::unordered_map<unsigned int, unsigned int> *idMapping, int board)
+    user_propagator(z3::solver *s, std::unordered_map<unsigned int, unsigned int> *idMapping, unsigned board)
             : user_propagator_base(s), id_mapping(idMapping), board(board) {
 
         currentModel = new model(board);
 
-        std::function<void(unsigned, z3::expr const &)> f1 = [this](unsigned id, z3::expr e) {
-            fixed(id, e);
-        };
-        std::function<void()> f2 = [this]() {
-            final();
-        };
-        this->register_fixed(f1);
-        this->register_final(f2);
+        this->register_fixed();
+        this->register_final();
     }
 
     ~user_propagator() {
@@ -169,14 +150,14 @@ public:
     }
 
     void push() override {
-        fixedCnt.push(fixedValues.size());
+        fixedCnt.push((unsigned) fixedValues.size());
     }
 
     void pop(unsigned num_scopes) override {
-        for (int i = 0; i < num_scopes; i++) {
-            int lastCnt = fixedCnt.top();
+        for (unsigned i = 0; i < num_scopes; i++) {
+            unsigned lastCnt = fixedCnt.top();
             fixedCnt.pop();
-            for (int j = fixedValues.size(); j > lastCnt; j--) {
+            for (unsigned j = (unsigned) fixedValues.size(); j > lastCnt; j--) {
                 currentModel->set(fixedValues[j - 1], -1);
             }
             fixedValues.resize(lastCnt);
@@ -226,14 +207,14 @@ public:
             : user_propagator(s, idMapping, board) {}
 };
 
-int log2i(int n) {
+int log2i(unsigned n) {
     if (n <= 0) {
         return 0;
     }
     if (n <= 2) {
         return 1;
     }
-    int l = 1;
+    unsigned l = 1;
     int i = 0;
     while (l < n) {
         l <<= 1;
@@ -242,10 +223,10 @@ int log2i(int n) {
     return i;
 }
 
-std::vector<z3::expr> createQueens(z3::context &context, int num) {
+std::vector<z3::expr> createQueens(z3::context &context, unsigned num) {
     std::vector<z3::expr> queens;
     int bits = log2i(num) + 1 /*to detect potential overflow in the diagonal*/;
-    for (int i = 0; i < num; i++) {
+    for (unsigned i = 0; i < num; i++) {
         queens.push_back(context.bv_const(("q"s + to_string(i)).c_str(), bits));
     }
     return queens;
@@ -255,11 +236,11 @@ void createConstraints(z3::context &context, z3::solver &solver, const std::vect
     for (int i = 0; i < queens.size(); i++) {
         // assert column range
         solver.add(z3::uge(queens[i], 0));
-        solver.add(z3::ule(queens[i], queens.size() - 1));
+        solver.add(z3::ule(queens[i], (int) (queens.size() - 1)));
     }
 
     z3::expr_vector distinct(context);
-    for (const z3::expr & queen : queens) {
+    for (const z3::expr &queen : queens) {
         distinct.push_back(queen);
     }
 
@@ -275,7 +256,7 @@ void createConstraints(z3::context &context, z3::solver &solver, const std::vect
 #endif
 }
 
-int test01(int num, bool simple) {
+int test01(unsigned num, bool simple) {
     z3::context context;
     z3::solver solver(context, !simple ? Z3_mk_solver(context) : Z3_mk_simple_solver(context));
 
@@ -294,14 +275,14 @@ int test01(int num, bool simple) {
 
         z3::model model = solver.get_model();
 
-        WriteLine("Model #" + std::to_string(solutionId) + ":");
+        WriteLine("Model #" + to_string(solutionId) + ":");
         solutionId++;
 
         z3::expr_vector blocking(context);
 
-        for (int i = 0; i < num; i++) {
+        for (unsigned i = 0; i < num; i++) {
             z3::expr eval = model.eval(queens[i]);
-            WriteLine(("q" + std::to_string(i + 1) + " = " + std::to_string(eval.get_numeral_int())));
+            WriteLine(("q" + to_string(i) + " = " + to_string(eval.get_numeral_int())));
             blocking.push_back(queens[i] != eval);
         }
 
@@ -312,15 +293,15 @@ int test01(int num, bool simple) {
     return solutionId - 1;
 }
 
-inline int test0(int num) {
+inline int test0(unsigned num) {
     return test01(num, false);
 }
 
-inline int test1(int num) {
+inline int test1(unsigned num) {
     return test01(num, true);
 }
 
-int test23(int num, bool withTheory) {
+int test23(unsigned num, bool withTheory) {
     z3::context context;
     z3::solver solver(context, Z3_mk_simple_solver(context));
     std::unordered_map<unsigned int, unsigned int> idMapping;
@@ -350,11 +331,11 @@ int test23(int num, bool withTheory) {
     return res;
 }
 
-inline int test2(int num) {
+inline int test2(unsigned num) {
     return test23(num, false);
 }
 
-inline int test3(int num) {
+inline int test3(unsigned num) {
     return test23(num, true);
 }
 
@@ -364,12 +345,12 @@ int main() {
 
         std::cout << "num = " << num << ":\n" << std::endl;
 
-        unsigned int seed = high_resolution_clock::now().time_since_epoch().count();
+        unsigned seed = (unsigned) high_resolution_clock::now().time_since_epoch().count();
         const char *testName[] =
                 {
-                        "Blocking clauses (Default solver)",
-                        "Blocking clauses (Simple solver)",
-                        "Adding conflicts",
+                        "BV + Blocking clauses (Default solver)",
+                        "BV + Blocking clauses (Simple solver)",
+                        "BV + Adding conflicts",
                         "Custom theory + conflicts",
                 };
         int permutation[4] =
