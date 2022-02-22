@@ -2,7 +2,7 @@
 #include <stack>
 #include <unordered_map>
 #include <vector>
-#include <c++/z3++.h>
+#include "z3++.h"
 #define WriteLine(x) std::cout << (x) << std::endl
 
 typedef std::vector<unsigned> model;
