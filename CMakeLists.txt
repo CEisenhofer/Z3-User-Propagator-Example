@@ -17,7 +17,7 @@ else ()
     message(${Z3_LIB})
 endif ()
 
-add_executable(All8QueensProblem All8QueensProblem.cpp)
+add_executable(All8QueensProblem example.cpp common.h user_propagator.h user_propagator_with_theory.h user_propagator_subquery_maximisation.h user_propagator_internal_maximisation.h user_propagator_created_maximisation.h)
 
 target_include_directories(All8QueensProblem PRIVATE ${Z3_INCLUDE})
 target_link_libraries(All8QueensProblem ${Z3_LIB})
