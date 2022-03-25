@@ -14,9 +14,12 @@
 
 using std::to_string;
 
+#define SORT_CNT 4
+#define BIT_CNT 64
+
 #define SIZE(x) std::extent<decltype(x)>::value
 
-#define VERBOSE
+// #define VERBOSE // Log events
 #ifdef VERBOSE
 #define WriteEmptyLine std::cout << std::endl
 #define WriteLine(x) std::cout << (x) << std::endl
@@ -27,7 +30,12 @@ using std::to_string;
 #define Write(x)
 #endif
 
-int log2i(unsigned n) {
+void sorting1();
+void sorting2();
+void sorting3();
+void disjointness();
+
+static int log2i(unsigned n) {
     if (n <= 0) {
         return 0;
     }

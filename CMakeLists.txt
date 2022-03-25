@@ -17,7 +17,12 @@ else ()
     message(${Z3_LIB})
 endif ()
 
-add_executable(All8QueensProblem example.cpp common.h user_propagator.h user_propagator_with_theory.h user_propagator_subquery_maximisation.h user_propagator_internal_maximisation.h user_propagator_created_maximisation.h)
+add_executable(All8QueensProblem example.cpp common.h user_propagator.h user_propagator_with_theory.h user_propagator_subquery_maximisation.h user_propagator_internal_maximisation.h user_propagator_created_maximisation.h big_num.cpp big_num.h disjointness.cpp sorting1.cpp sorting2.cpp sorting3.cpp)
 
 target_include_directories(All8QueensProblem PRIVATE ${Z3_INCLUDE})
-target_link_libraries(All8QueensProblem ${Z3_LIB})
+target_link_libraries(All8QueensProblem PRIVATE ${Z3_LIB})
+
+# if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+#    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,stack-size=4096")
+# endif ()
+
