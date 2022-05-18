@@ -10,12 +10,12 @@ class user_propagator_subquery_maximisation : public user_propagator {
 
 public:
 
-    user_propagator_subquery_maximisation(z3::solver *s, std::unordered_map<z3::expr, unsigned> &idMapping, unsigned board, z3::expr_vector queens)
-            : user_propagator(s, idMapping, board),
+    user_propagator_subquery_maximisation(z3::solver *s, unsigned board, const z3::expr_vector& queens)
+            : user_propagator(s, queens, board, false),
               assertion(mk_and(s->assertions())),
               queens(queens), manhattanSum(s->ctx().bv_val(0, queens[0].get_sort().bv_size())) {
 
-        for (int i = 1; i < queens.size(); i++) {
+        for (unsigned i = 1; i < queens.size(); i++) {
             manhattanSum = manhattanSum + z3::ite(z3::uge(queens[i], queens[i - 1]), queens[i] - queens[i - 1], queens[i - 1] - queens[i]);
         }
     }
@@ -40,7 +40,7 @@ public:
 
         int prev, curr = -1;
 
-        for (int i = 0; i < queens.size(); i++) {
+        for (unsigned i = 0; i < queens.size(); i++) {
             prev = curr;
             curr = counterExample.eval(queens[i]).get_numeral_int();
             if (i == 0) continue;

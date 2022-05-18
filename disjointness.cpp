@@ -397,6 +397,5 @@ void disjointness() {
             intervals.push_back(std::make_pair(low, high));
         }
     }
-    exit(1);
 }
 

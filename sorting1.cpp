@@ -1,7 +1,34 @@
 #include "common.h"
 
-void sorting1() {
+void checkSorting(const z3::model &model, const z3::expr_vector &in, const z3::expr_vector &out) {
+    if (in.size() != out.size()) {
+        exit(13);
+    }
+    std::vector<uint64_t> inputs;
+    inputs.reserve(in.size());
+    for (unsigned i = 0; i < in.size(); i++) {
+        inputs.push_back(model.eval(in[i]).get_numeral_uint64());
+    }
+#ifdef VERBOSE
+    for (unsigned i = 0; i < inputs.size(); i++) {
+        std::cout << "in" << i << " = " << inputs[i] << std::endl;
+    }
+#endif
+    std::ranges::sort(inputs);
+    for (unsigned i = 0; i < out.size(); i++) {
+        uint64_t v = model.eval(out[i]).get_numeral_uint64();
+        if (inputs[i] != v) {
+            exit(14);
+        }
+#ifdef VERBOSE
+        std::cout << "out" << i << " = " << inputs[i] << std::endl;
+#endif
+    }
 
+}
+
+int sorting1(unsigned *size) {
+    unsigned cnt = *size;
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
@@ -12,7 +39,7 @@ void sorting1() {
     std::vector<z3::func_decl> firstLevel;
     z3::expr_vector disj(context);
 
-    for (unsigned i = 0; i < SORT_CNT; i++) {
+    for (unsigned i = 0; i < cnt; i++) {
         z3::sort_vector domain(context);
         domain.push_back(context.bv_sort(1));
         z3::func_decl v = context.function((std::string("v_{0,") + std::to_string(i) + "}").c_str(), domain, context.bv_sort(BIT_CNT));
@@ -57,26 +84,20 @@ void sorting1() {
         subResults.push_back(nextLevel);
     }
 
-    // std::cout << "Problem: " << s.assertions().to_string() << "\n" << std::endl;
-
-    auto result = s.check();
-    if (result == z3::check_result::sat) {
-
-        std::cout << "Sat" << std::endl;
-        z3::model m = s.get_model();
-
-        std::cout << "Model: " << m.to_string() << std::endl;
-
-        for (unsigned i = 0; i < firstLevel.size(); i++) {
-            std::cout << "v[" << i << "] = " << m.eval(subResults[0][i](0)).get_numeral_uint64() << std::endl;
-        }
-        for (unsigned i = 0; i < firstLevel.size(); i++) {
-            std::cout << "w[" << i << "] = " << m.eval(subResults.back()[0](i)).get_numeral_uint64() << std::endl;
-        }
+    z3::expr_vector counterOrder(context);
+    for (int i = 0; i < cnt - 1; i++) {
+        counterOrder.push_back(firstLevel[i](0) >= firstLevel[i + 1](0));
     }
-    else {
-        std::cout << "Unsat" << std::endl;
-    }
+    s.add(z3::mk_and(counterOrder));
 
-    exit(1);
+    s.check();
+
+    z3::model m = s.get_model();
+    z3::expr_vector in(context), out(context);
+    for (unsigned i = 0; i < firstLevel.size(); i++) {
+        in.push_back(subResults[0][i](0));
+        out.push_back(subResults.back()[0](i));
+    }
+    checkSorting(m, in, out);
+    return -1;
 }

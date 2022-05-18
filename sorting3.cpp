@@ -24,6 +24,8 @@ public:
             user_propagator_base(s), fixedValues(s->ctx()), funcs(funcs), in(in) {
 
         this->register_fixed();
+        this->register_created();
+        this->register_decide();
         assert(in.size() == funcs.size());
         currentSorted.reserve(in.size());
         for (unsigned i = 0; i < in.size(); i++) {
@@ -70,8 +72,7 @@ public:
         alreadyPropagated = true;
 
         for (unsigned i = 0; i < in.size(); i++) {
-            uint64_t w = model.at(in[i]);
-            currentSorted.push_back(w);
+            currentSorted[i] = model.at(in[i]);
         }
         std::sort(currentSorted.begin(), currentSorted.end());
         for (unsigned i = 0; i < funcs.size(); i++) {
@@ -80,16 +81,32 @@ public:
                 premiss.push_back(in[j] == ctx().bv_val(model.at(in[j]), BIT_CNT));
             }
             z3::expr_vector empty(ctx());
-            // std::cout << "Prop: " << z3::implies(z3::mk_and(premiss), z3::mk_and(sorted)).to_string() << std::endl;
             this->propagate(empty, z3::implies(z3::mk_and(premiss), funcs[i] == ctx().bv_val(currentSorted[i], BIT_CNT)));
         }
+    }
+
+    void decide(z3::expr& val, unsigned& bit, Z3_lbool& is_pos) override {
+        if (hasAllInValues() || astToIndex.at(val) > 0) {
+            return;
+        }
+        for (unsigned i = 0; i < in.size(); i++) {
+            if (!model.contains(in[i])) {
+                WriteLine("Changed " + val.to_string() + " to " + in[i].to_string());
+                val = in[i];
+                bit = 0;
+                is_pos = Z3_L_UNDEF;
+                return;
+            }
+        }
+        assert(false);
     }
 
     user_propagator_base *fresh(z3::context &ctx) override { return this; }
 
 };
 
-void sorting3() {
+int sorting3(unsigned *size) {
+    unsigned cnt = *size;
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
@@ -98,12 +115,11 @@ void sorting3() {
     z3::expr_vector out(context);
     z3::expr_vector funcs(context);
 
-    std::cout << "Sorting (3) " << SORT_CNT << " elements" << std::endl;
-    for (unsigned i = 0; i < SORT_CNT; i++) {
+    for (unsigned i = 0; i < cnt; i++) {
         domain.push_back(context.bv_sort(BIT_CNT));
         in.push_back(context.constant((std::string("in") + std::to_string(i)).c_str(), domain[i]));
     }
-    for (unsigned i = 0; i < SORT_CNT; i++) {
+    for (unsigned i = 0; i < cnt; i++) {
         z3::func_decl sorted = context.user_propagate_function(
                 context.str_symbol(("sorted_" + std::to_string(i)).c_str()),
                 domain,
@@ -117,26 +133,16 @@ void sorting3() {
 
     s.add(z3::distinct(in));
 
+    z3::expr_vector counterOrder(context);
+    for (int i = 0; i < cnt - 1; i++) {
+        counterOrder.push_back(in[i] >= in[i + 1]);
+    }
+    s.add(z3::mk_and(counterOrder));
+
     SortedPropagator3 propagator(&s, funcs, in);
 
-    auto result = s.check();
-    if (result == z3::check_result::sat) {
-
-        std::cout << "Sat" << std::endl;
-        z3::model m = s.get_model();
-
-        std::cout << "Model: " << m.to_string() << std::endl;
-
-        for (unsigned i = 0; i < in.size(); i++) {
-            std::cout << "in" << i << " = " << m.eval(in[i]).get_numeral_uint64() << std::endl;
-        }
-        for (unsigned i = 0; i < out.size(); i++) {
-            std::cout << "out" << i << " = " << m.eval(out[i]).get_numeral_uint64() << std::endl;
-        }
-    }
-    else {
-        std::cout << "Unsat" << std::endl;
-    }
-
-    exit(1);
+    s.check();
+    z3::model m = s.get_model();
+    checkSorting(m, in, out);
+    return -1;
 }

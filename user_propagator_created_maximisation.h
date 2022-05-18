@@ -14,7 +14,7 @@ class user_propagator_created_maximisation : public z3::user_propagator_base {
 
     user_propagator_created_maximisation* childPropagator = nullptr;
 
-    int board;
+    unsigned board;
     int nesting; // Just for logging (0 ... main solver; 1 ... sub-solver)
 
 public:
@@ -208,7 +208,7 @@ public:
 //        WriteLine("Fixed (" + to_string(nesting) + ") " + expr.to_string() + " to " + value.to_string());
 //        unsigned v = value.is_true() ? 1 : (value.is_false() ? 0 : value.get_numeral_uint());
 //        currentModel[expr] = v;
-//        fixedValues.push_back(expr);
+//        fixedVariables.push_back(expr);
 //
 //        if (fctToArgs.contains(expr)) {
 //            // fixed the value of a function

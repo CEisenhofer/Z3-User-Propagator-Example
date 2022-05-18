@@ -1,3 +1,13 @@
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#define WINDOWS
+#include <Windows.h>
+#include <conio.h>
+#define getch() _getch()
+#else
+#define getch() exit(9)
+#endif
+
+
 #include "user_propagator.h"
 #include "user_propagator_with_theory.h"
 #include "user_propagator_subquery_maximisation.h"
@@ -16,273 +26,452 @@
  * Runs 1 + 2 are done for comparison with 3 + 4
  */
 
-using namespace std::chrono;
+typedef int (*benchark_fct)(unsigned[]);
 
-#define REPETITIONS 2
+bool isPrintStatistics = false;
 
-#define MIN_BOARD 4
-#define MAX_BOARD1 12
-#define MAX_BOARD2 12
+void printStatistics(z3::solver& s) {
+    if (!isPrintStatistics)
+        return;
 
-z3::expr_vector createQueens(z3::context &context, unsigned num, int bits, std::string prefix) {
-    z3::expr_vector queens(context);
-    for (unsigned i = 0; i < num; i++) {
-        queens.push_back(context.bv_const((prefix + "q" + to_string(i)).c_str(), bits));
-    }
-    return queens;
-}
+    const std::string interestingKeys[] {
+        "conflicts",
+        "decisions",
+        "del clause",
+        "final checks",
+        "memory",
+        "mk bool var",
+        "mk clause",
+        "propagations",
+        "user-propagations"
+    };
 
-z3::expr_vector createQueens(z3::context &context, unsigned num) {
-    return createQueens(context, num, log2i(num) + 1, "");
-}
+    z3::stats stats = s.statistics();
 
-z3::expr createConstraints(z3::context &context, const z3::expr_vector &queens) {
-    z3::expr_vector assertions(context);
-    for (unsigned i = 0; i < queens.size(); i++) {
-        // assert column range
-        assertions.push_back(z3::uge(queens[i], 0));
-        assertions.push_back(z3::ule(queens[i], (int)(queens.size() - 1)));
-    }
+    std::vector<double> values;
+    values.resize(SIZE(interestingKeys), 0.0);
 
-    z3::expr_vector distinct(context);
-    for (const z3::expr &queen: queens) {
-        distinct.push_back(queen);
-    }
+    const unsigned size = stats.size();
 
-    assertions.push_back(z3::distinct(distinct));
-
-    for (unsigned i = 0; i < queens.size(); i++) {
-        for (unsigned j = i + 1; j < queens.size(); j++) {
-            assertions.push_back((int)(j - i) != (queens[j] - queens[i]));
-            assertions.push_back((int)(j - i) != (queens[i] - queens[j]));
+    for (unsigned i = 0; i < size; i++) {
+        const std::string key = stats.key(i);
+        for (unsigned j = 0; j < values.size(); j++) {
+            if (key == interestingKeys[j]) {
+                if (stats.is_double(i))
+                    values[j] = stats.double_value(i);
+                else if (stats.is_uint(i))
+                    values[j] = (double)stats.uint_value(i);
+                else
+                    assert(false);
+                break;
+            }
         }
     }
 
-    return z3::mk_and(assertions);
+    for (unsigned i = 0; i < values.size(); i++) {
+        std::cout << interestingKeys[i] << ": " << values[i] << std::endl;
+    }
+
+    std::cout << "{ " << values[0];
+
+    for (unsigned i = 1; i < values.size(); i++) {
+        std::cout << ", " << values[i];
+    }
+
+    std::cout << " }" << std::endl;
+
+    //std::cout << "Stats: " << Z3_stats_to_string(s.ctx(), stats) << std::endl;
+
 }
 
-int test01(unsigned num, bool simple) {
-    z3::context context;
-    z3::solver solver(context, !simple ? Z3_mk_solver(context) : Z3_mk_simple_solver(context));
+void benchmark(unsigned *arg, const benchark_fct *testFcts, const char **testNames, unsigned cnt) {
+    unsigned seed = (unsigned)high_resolution_clock::now().time_since_epoch().count();
+    auto e = std::default_random_engine(seed);
+    std::vector<int> permutation;
+    for (unsigned i = 0; i < cnt; i++)
+        permutation.push_back(i);
 
-    z3::expr_vector queens = createQueens(context, num);
+    std::vector<std::vector<double>> timeResults;
+    for (unsigned i = 0; i < cnt; i++) {
+        timeResults.emplace_back();
+    }
 
-    solver.add(createConstraints(context, queens));
+    for (int rep = 0; rep < REPETITIONS; rep++) {
+#ifdef RANDOM_SHUFFLE
+        // Execute strategies in a randomised order
+        std::shuffle(permutation.begin(), permutation.end(), e);
+#endif
+        unsigned random_seed = e() % 100000;
+        std::cout << "Random seed: " << random_seed << std::endl;
 
-    int solutionId = 1;
+        for (int i: permutation) {
 
-    while (true) {
-        z3::check_result res = solver.check();
-
-        if (res != z3::check_result::sat) {
-            break;
+            z3::set_param("sat.random_seed", (int)random_seed);
+            z3::set_param("smt.random_seed", (int)random_seed);
+            auto now1 = high_resolution_clock::now();
+            int res = testFcts[i](arg);
+            auto now2 = high_resolution_clock::now();
+            duration<double, std::milli> ms = now2 - now1;
+            std::cout << testNames[i] << " took " << ms.count() << "ms";
+            if (res != -1) {
+                std::cout << " (" << res << ")";
+            }
+            std::cout << std::endl;
+            timeResults[i].push_back(ms.count());
+            WriteLine("-------------");
         }
+    }
 
-        z3::model model = solver.get_model();
+    std::cout << "\n" << std::endl;
 
-        WriteLine("Model #" + to_string(solutionId) + ":");
-        solutionId++;
+    std::vector<double> results;
 
-        z3::expr_vector blocking(context);
-
-        for (unsigned i = 0; i < num; i++) {
-            z3::expr eval = model.eval(queens[i]);
-            WriteLine(("q" + to_string(i) + " = " + to_string(eval.get_numeral_int())));
-            blocking.push_back(queens[i] != eval);
+    for (unsigned i = 0; i < cnt; i++) {
+        std::cout << testNames[i];
+        double sum = 0;
+        for (int j = 0; j < REPETITIONS; j++) {
+            std::cout << " " << timeResults[i][j] << "ms";
+            sum += timeResults[i][j];
         }
-
-        solver.add(z3::mk_or(blocking));
-
-        WriteEmptyLine;
+        std::cout << " | avg: " << sum / REPETITIONS << "ms" << std::endl;
+        results.push_back(sum / REPETITIONS);
     }
-    return solutionId - 1;
+
+    std::cout << std::endl;
+
+    // For copying to Mathematica
+    std::cout << "{ " << results[0];
+    for (unsigned i = 1; i < results.size(); i++) {
+        std::cout << ", " << results[i];
+    }
+    std::cout << " }" << std::endl;
 }
 
-inline int test0(unsigned num) {
-    return test01(num, false);
+void benchmark(unsigned* arg, const std::initializer_list<benchark_fct> testFcts, const std::initializer_list<const char*> testNames) {
+    std::vector<const char*> names;
+    std::vector<benchark_fct> fcts;
+    names.reserve(testNames.size());
+    fcts.reserve(testNames.size());
+    for (const auto& name : testNames) {
+        names.push_back(name);
+    }
+    for (const auto& fct: testFcts) {
+        fcts.push_back(fct);
+    }
+    return benchmark(arg, fcts.data(), names.data(), (unsigned)testNames.size());
 }
 
-inline int test1(unsigned num) {
-    return test01(num, true);
+void testNQueens() {
+    std::cout << "#n-Queens:" << std::endl;
+
+    for (unsigned num = MIN_BOARD; num <= MAX_BOARD1; num++) {
+
+        std::cout << "num = " << num << ":\n" << std::endl;
+
+        const benchark_fct testFcts[] = {
+                nqueensNoPropagator1,
+                nqueensNoPropagator2,
+                nqueensNoPropagator3,
+                nqueensPropagator1,
+                nqueensPropagator2
+                //nqueensPropagator3,
+        };
+        const char *testNames[] = {
+                "BV + Blocking clauses (Default solver)",
+                "BV + Blocking clauses (Simple solver)",
+                "BV + Blocking clauses + Useless Propagator",
+                "BV + Adding conflicts",
+                "Custom theory + conflicts",
+                //"Custom theory + conflicts + ordered",
+        };
+        static_assert(SIZE(testFcts) == SIZE(testNames));
+        if (num == 11)
+            isPrintStatistics = true;
+        benchmark(&num, testFcts, testNames, SIZE(testFcts));
+        isPrintStatistics = false;
+    }
 }
 
-int test23(unsigned num, bool withTheory) {
-    z3::context context;
-    z3::solver solver(context, z3::solver::simple());
-    std::unordered_map<z3::expr, unsigned> idMapping;
+void testSingleNQueens() {
+    std::cout << "n-Queens:" << std::endl;
 
-    user_propagator *propagator;
-    if (!withTheory) {
-        propagator = new user_propagator(&solver, idMapping, num);
+    for (unsigned num = MIN_BOARD; num <= MAX_BOARD1; num++) {
+
+        std::cout << "num = " << num << ":\n" << std::endl;
+
+        const benchark_fct testFcts[] = {
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false); },
+        };
+        const char* testNames[] = {
+                "BV + Adding conflicts",
+                "Custom theory + conflicts",
+        };
+        static_assert(SIZE(testFcts) == SIZE(testNames));
+        if (num == 50)
+            isPrintStatistics = true;
+        benchmark(&num, testFcts, testNames, SIZE(testFcts));
+        isPrintStatistics = false;
     }
-    else {
-        propagator = new user_propagator_with_theory(&solver, idMapping, num);
-    }
-
-    z3::expr_vector queens = createQueens(context, num);
-
-    for (unsigned i = 0; i < queens.size(); i++) {
-        propagator->add(queens[i]);
-        idMapping[queens[i]] = i;
-    }
-
-    if (!withTheory) {
-        solver.add(createConstraints(context, queens));
-    }
-
-    solver.check();
-    int res = propagator->getModelCount();
-    delete propagator;
-    return res;
 }
 
-inline int test2(unsigned num) {
-    return test23(num, false);
+void testNQueensOptimization() {
+    z3::set_param("smt.ematching", "false");
+    z3::set_param("smt.mbqi", "true");
+
+    std::cout << "\nMaximal distance:" << std::endl;
+
+    for (unsigned num = MIN_BOARD; num <= MAX_BOARD2; num++) {
+
+        std::cout << "num = " << num << ":\n" << std::endl;
+
+        const benchark_fct testFcts[] = {
+                nqueensMaximization1,
+                nqueensMaximization2,
+                nqueensMaximization3,
+                nqueensMaximization4,
+        };
+        const char *testNames[] = {
+                "Ordinary/Direct Encoding",
+                "SubQuery in final",
+                "Assert Smaller in final",
+                "created",
+        };
+        static_assert(SIZE(testFcts) == SIZE(testNames));
+        benchmark(&num, testFcts, testNames, SIZE(testFcts));
+    }
 }
 
-inline int test3(unsigned num) {
-    return test23(num, true);
+void testDistinctness() {
+    std::cout << "Distinctness:" << std::endl;
+
+    for (unsigned num = 4; num <= DISTINCT_CNT; num <<= 1) {
+
+        std::cout << "num = " << num << ":\n" << std::endl;
+
+        const benchark_fct testFcts[] = {
+                distinct1,
+                distinct2,
+                distinct3,
+                distinct4,
+        };
+        const char *testNames[] = {
+                "Distinct-O(n^2)",
+                "Bijection-O(n^2)",
+                "Distinct-Propagator",
+                "Bijection-Propagator",
+        };
+        unsigned bits = log2i(num);
+        static_assert(SIZE(testFcts) == SIZE(testNames));
+        unsigned args[2];
+        args[0] = num;
+        args[1] = (unsigned)std::min((int)num, 32); // enough space
+        std::cout << "enough space\n" << std::endl;
+        benchmark(args, testFcts, testNames, SIZE(testFcts));
+        args[1] = bits; // 1 : 1
+        std::cout << "1:1\n" << std::endl;
+        benchmark(args, testFcts, testNames, SIZE(testFcts));
+        if (bits > 1) {
+            args[1] = bits - 1; // unsat
+            std::cout << "not enough space\n" << std::endl;
+            benchmark(args, testFcts, testNames, SIZE(testFcts));
+        }
+    }
 }
 
-int test4(unsigned num) {
-    z3::context context;
-    z3::solver solver(context, z3::solver::simple());
+void testSorting() {
 
-    z3::expr_vector queens1 = createQueens(context, num, log2i(num * num), ""); // square to avoid overflow during summation
+    std::cout << "Sorting:" << std::endl;
 
-    z3::expr valid1 = createConstraints(context, queens1);
+    for (unsigned num = 2; num <= SORT_CNT; num <<= 1) {
 
-    z3::expr_vector queens2 = createQueens(context, num, log2i(num * num), "forall_");
-
-    z3::expr valid2 = createConstraints(context, queens2);
-
-    z3::expr manhattanSum1 = context.bv_val(0, queens1[0].get_sort().bv_size());
-    z3::expr manhattanSum2 = context.bv_val(0, queens2[0].get_sort().bv_size());
-
-    for (int i = 1; i < queens1.size(); i++) {
-        manhattanSum1 = manhattanSum1 + z3::ite(z3::uge(queens1[i], queens1[i - 1]), queens1[i] - queens1[i - 1], queens1[i - 1] - queens1[i]);
-        manhattanSum2 = manhattanSum2 + z3::ite(z3::uge(queens2[i], queens2[i - 1]), queens2[i] - queens2[i - 1], queens2[i - 1] - queens2[i]);
+        std::cout << "num = " << num << ":\n" << std::endl;
+        const benchark_fct testFcts[] = {
+                //sorting1,
+                sorting2,
+                //sorting3,
+                sorting4,
+                sorting5,
+                //sorting6,
+                sorting7,
+                sorting8,
+        };
+        const char *testNames[] = {
+                //"Merge-Sort (BMC)",
+                "Direct Sort (Predicate)",
+                //"Direct Sort (Function)",
+                "Insertion-Sort Network",
+                "Lazy Insertion-Sort Network",
+                //"Permutation",
+                "Odd-Even Sorting Network",
+                "Lazy Odd-Even Sorting Network",
+        };
+        static_assert(SIZE(testFcts) == SIZE(testNames));
+        benchmark(&num, testFcts, testNames, SIZE(testFcts));
     }
-
-
-    solver.add(valid1 && z3::forall(queens2, z3::implies(valid2, manhattanSum1 >= manhattanSum2)));
-
-    solver.check();
-    z3::model model = solver.get_model();
-
-    int max = 0;
-
-    int prev, curr;
-    curr = model.eval(queens1[0]).get_numeral_int();
-
-    for (unsigned i = 1; i < num; i++) {
-        prev = curr;
-        curr = model.eval(queens1[i]).get_numeral_int();
-        max += abs(curr - prev);
-    }
-
-    return max;
 }
 
-int test5(unsigned num) {
-    z3::context context;
-    z3::solver solver(context, z3::solver::simple());
-    std::unordered_map<z3::expr, unsigned> idMapping;
+struct Test: z3::user_propagator_base {
 
-    z3::expr_vector queens = createQueens(context, num, log2i(num * num), "");
-
-    solver.add(createConstraints(context, queens));
-
-    user_propagator_subquery_maximisation propagator(&solver, idMapping, num, queens);
-
-    for (unsigned i = 0; i < queens.size(); i++) {
-        propagator.add(queens[i]);
-        idMapping[queens[i]] = i;
+    Test(z3::solver* s) : user_propagator_base(s) {
+        this->register_fixed();
+        this->register_decide();
+        z3::expr unregistered = ctx().bool_const("unregistered");
+        z3::expr a = ctx().bool_const("a");
+        z3::expr b = ctx().bool_const("b");
+        z3::expr c = ctx().bool_const("c");
+        z3::expr d = ctx().bv_const("d", 3);
+        z3::expr e = ctx().bv_const("e", 3);
+        z3::expr x = ctx().int_const("x");
+        z3::expr y = ctx().int_const("y");
+        //s->add(((a || b) || c || unregistered /*|| x + y == 2*/) && d == e);
+        s->add(a || b);
+        //this->add(a);
+        //this->add(b);
+        //this->add(c);
+        this->add(a || b);
+        //this->add(d);
+        //this->add(e);
+        //this->add(d == e);
+        //this->add(x + y == 2);
     }
 
-    solver.check();
-    z3::model model = solver.get_model();
-
-    int max = 0;
-
-    int prev, curr;
-    curr = model.eval(queens[0]).get_numeral_int();
-    for (unsigned i = 1; i < num; i++) {
-        prev = curr;
-        curr = model.eval(queens[i]).get_numeral_int();
-        max += abs(curr - prev);
+    void push() override {
+        std::cout << "Push" << std::endl;
     }
 
-    return max;
+    void pop(unsigned int num_scopes) override {
+        std::cout << "Pop: " << num_scopes << std::endl;
+    }
+
+    void fixed(const z3::expr& ast, const z3::expr& value) override {
+        std::cout << "Fixed " + ast.to_string() + " to " + value.to_string() << std::endl;
+    }
+
+    void decide(z3::expr& val, unsigned& bit, Z3_lbool& is_pos) override {
+        std::cout << "Decide: " + val.to_string() + 
+            " bit: " + std::to_string(bit) + 
+            " = " + (is_pos == Z3_L_FALSE ? "false" : "true") << std::endl;
+        is_pos = Z3_L_TRUE;
+        bit = 0;
+    }
+
+    user_propagator_base* fresh(z3::context& ctx) override { return this; }
+
+};
+
+const std::initializer_list<benchark_fct> optSortingFcts = {
+    //[](unsigned* a) { return opt_sorting(a, Params(false, false, false, false, false, false, false, false, false)); },
+    [](unsigned* a) { return opt_sorting(a, Params(true , false, false, false, false , false, false, true, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true , false, false, false, true , false, false, false, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true , false, false, false, true , false, true , false, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true , false, false, false, true , true , true , false, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true , false, false, false, true , true , true , true, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true, true, false, false, true, true, true , false, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true , true , true , false, true , true , true , false, false)); },
+    //[](unsigned* a) { return opt_sorting(a, Params(true, true, false, true, true, true, true, false, false)); },
+};
+
+const std::initializer_list<const char*> optSortingNames = {
+    //"Nothing",
+    "Simulated Quantifier",
+    //"Adjacent",
+    //"Adjacent + Connected",
+    //"Adjacent + Connected (All)",
+    //"Adjacent + Connected (All) + Simulated Quantifier",
+    //"Adjacent + Connected (All) + Decide",
+    //"Adjacent + Connected (All) + Decide + Random",
+    //"Adjacent + Connected (All) + Decide + Occurrences",
+};
+
+void findOptimalUnsat() {
+    unsigned int _args[] = { 3, 1, (unsigned)false };
+    benchmark(
+        _args,
+        optSortingFcts,
+        optSortingNames
+    );
 }
 
-int test6(unsigned num) {
-    z3::context context;
-    z3::solver solver(context, z3::solver::simple());
-    std::unordered_map<z3::expr, unsigned> idMapping;
-
-    z3::expr_vector queens = createQueens(context, num, log2i(num * num), "");
-
-    solver.add(createConstraints(context, queens));
-
-    user_propagator_internal_maximisation propagator(&solver, idMapping, num, queens);
-
-    for (unsigned i = 0; i < queens.size(); i++) {
-        propagator.add(queens[i]);
-        idMapping[queens[i]] = i;
+void findOptimalSat() {
+    unsigned solutions[] = {0, 0, 1, 3, 5, 9, 12, 16, 19, 25, 29, 35, 39 };
+    unsigned _args[] = { 0, 0, (unsigned)false };
+    for (unsigned i = 2; i < SIZE(solutions); i++) {
+        _args[0] = i;
+        _args[1] = solutions[i];
+        benchmark(
+            _args,
+            optSortingFcts,
+            optSortingNames
+        );
     }
-
-    solver.check();
-    return propagator.best;
 }
 
-int test7(unsigned num) {
-    z3::context context;
-    z3::solver solver(context, z3::solver::simple());
-
-    z3::expr_vector queens1 = createQueens(context, num, log2i(num * num), "");
-    z3::expr_vector queens2 = createQueens(context, num, log2i(num * num), "forall_");
-
-    z3::expr manhattanSum1 = context.bv_val(0, queens1[0].get_sort().bv_size());
-    z3::expr manhattanSum2 = context.bv_val(0, queens2[0].get_sort().bv_size());
-
-    for (int i = 1; i < queens1.size(); i++) {
-        manhattanSum1 = manhattanSum1 + z3::ite(z3::uge(queens1[i], queens1[i - 1]), queens1[i] - queens1[i - 1], queens1[i - 1] - queens1[i]);
-        manhattanSum2 = manhattanSum2 + z3::ite(z3::uge(queens2[i], queens2[i - 1]), queens2[i] - queens2[i - 1], queens2[i - 1] - queens2[i]);
-    }
-
-    z3::sort_vector domain(context);
-    for (int i = 0; i < queens1.size(); i++) {
-        domain.push_back(queens1[i].get_sort());
-    }
-    z3::func_decl validFunc = context.user_propagate_function(context.str_symbol("valid"), domain, context.bool_sort());
-
-    solver.add(validFunc(queens1) && z3::forall(queens2, z3::implies(validFunc(queens2), manhattanSum1 >= manhattanSum2)));
-    user_propagator_created_maximisation propagator(&solver, num);
-
-    solver.check();
-    z3::model model = solver.get_model();
-
-    int max = 0;
-
-    int prev, curr;
-    curr = model.eval(queens1[0]).get_numeral_int();
-
-    for (unsigned i = 1; i < num; i++) {
-        prev = curr;
-        curr = model.eval(queens1[i]).get_numeral_int();
-        max += abs(curr - prev);
-    }
-
-    return max;
+void findAllOptimalSolutions(unsigned sz) {
+    unsigned args[] = { sz, 1, (unsigned)false };
+    opt_sorting(args, Params(true, true, false, true, true, true, true, true, true));
 }
 
 int main() {
 
-    sorting3();
-    sorting2();
-    sorting1();
-    disjointness();
+#ifdef WINDOWS
+    CONSOLE_SCREEN_BUFFER_INFO csbi = {};
+    HANDLE con = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(con, &csbi);
+    csbi.dwSize.Y = SHRT_MAX - 1;
+    SetConsoleScreenBufferSize(con, csbi.dwSize);
+#endif
+
+    //z3::context _ctx;
+    //z3::solver _s(_ctx, z3::solver::simple());
+    //Test t(&_s);
+    //_s.check();
+
+    // z3::set_param("smt.bv.eq_axioms", false);
+
+    testSorting();
+
+    _getch();
+    //testSingleNQueens();
+    //testNQueens();
+    _getch();
+
+    z3::set_param("smt.mbqi.max_iterations", 100000000);
+
+    //findAllOptimalSolutions(5);
+    //findOptimalSat();
+    findOptimalUnsat();
+    //getch();
+
+    unsigned _args[] = { 5, 1, (unsigned)false };
+
+    // sorting2(_args);
+    // sorting3(_args);
+    // sorting4(_args);
+    // sorting5(_args);
+    // sorting6(_args);
+    // opt_sorting(_args, Params(true, true, false, true, true, true, true, false, false));
+    getch();
+    //std::cout << opt_sorting(_args, Params(true, true, false, false, true, true)) << std::endl;
+    getch();
+
+    std::cout << "Optimal sorting network of size " << _args[0] << ": \n" << opt_sorting(_args) << std::endl;
+    
+    exit(19);
+    //sorting7(_args);
+    testSorting();
+    exit(14);
+    
+    unsigned int args[] = {5, 2};
+    std::cout << nqueensHigherDimensionAllCover(args) << std::endl;
+    exit(100);
+    std::cout << "Starting" << std::endl;
+
+    testSorting();
+    exit(1);
+    testDistinctness();
+
+    // disjointness();
 
     /*BigNum a(1, 8);
     BigNum b(2, 8);
@@ -382,136 +571,7 @@ int main() {
     }, true);
     assert(collisions.size() == 9);*/
 
-    for (int num = MIN_BOARD; num <= MAX_BOARD1; num++) {
-
-        std::cout << "num = " << num << ":\n" << std::endl;
-
-        unsigned seed = (unsigned)high_resolution_clock::now().time_since_epoch().count();
-        const char *testName[] =
-                {
-                        "BV + Blocking clauses (Default solver)",
-                        "BV + Blocking clauses (Simple solver)",
-                        "BV + Adding conflicts",
-                        "Custom theory + conflicts",
-                };
-        int permutation[4] = {0, 1, 2, 3,};
-        double timeResults[REPETITIONS * SIZE(permutation)];
-
-        for (int rep = 0; rep < REPETITIONS; rep++) {
-            // Execute strategies in a randomised order
-            std::shuffle(&permutation[0], &permutation[SIZE(permutation) - 1], std::default_random_engine(seed));
-
-            for (int i: permutation) {
-                int modelCount = -1;
-
-                auto now1 = high_resolution_clock::now();
-
-                switch (i) {
-                    case 0:
-                        modelCount = test0(num);
-                        break;
-                    case 1:
-                        modelCount = test1(num);
-                        break;
-                    case 2:
-                        modelCount = test2(num);
-                        break;
-                    case 3:
-                        modelCount = test3(num);
-                        break;
-                    default:
-                        WriteLine("Unknown case");
-                        break;
-                }
-                auto now2 = high_resolution_clock::now();
-                duration<double, std::milli> ms = now2 - now1;
-                std::cout << testName[i] << " took " << ms.count() << "ms (" << modelCount << " models)" << std::endl;
-                timeResults[rep * SIZE(permutation) + i] = ms.count();
-                WriteLine("-------------");
-            }
-        }
-
-        std::cout << "\n" << std::endl;
-
-        for (unsigned i = 0; i < SIZE(permutation); i++) {
-            std::cout << testName[i];
-            double sum = 0;
-            for (int j = 0; j < REPETITIONS; j++) {
-                std::cout << " " << timeResults[j * SIZE(permutation) + i] << "ms";
-                sum += timeResults[j * SIZE(permutation) + i];
-            }
-            std::cout << " | avg: " << sum / REPETITIONS << "ms" << std::endl;
-        }
-
-        std::cout << std::endl;
-    }
-
-    z3::set_param("smt.ematching", "false");
-    z3::set_param("smt.mbqi", "true");
-
-    std::cout << "\nMaximal distance:" << std::endl;
-
-    for (int num = MIN_BOARD; num <= MAX_BOARD2; num++) {
-
-        std::cout << "num = " << num << ":\n" << std::endl;
-
-        unsigned seed = (unsigned)high_resolution_clock::now().time_since_epoch().count();
-        const char *testName[] =
-                {
-                        "Ordinary/Direct Encoding",
-                        "SubQuery in final",
-                        "Assert Smaller in final",
-                        "created",
-                };
-        int permutation[4] = {0, 1, 2, 3,};
-        double timeResults[REPETITIONS * SIZE(permutation)];
-
-        for (int rep = 0; rep < REPETITIONS; rep++) {
-            // Execute strategies in a randomised order
-            std::shuffle(&permutation[0], &permutation[SIZE(permutation) - 1], std::default_random_engine(seed));
-
-            for (int i: permutation) {
-                int max = -1;
-
-                auto now1 = high_resolution_clock::now();
-
-                switch (i + 4) {
-                    case 4:
-                        max = test4(num);
-                        break;
-                    case 5:
-                        max = test5(num);
-                        break;
-                    case 6:
-                        max = test6(num);
-                        break;
-                    case 7:
-                        max = test7(num);
-                        break;
-                    default:
-                        WriteLine("Unknown case");
-                        break;
-                }
-                auto now2 = high_resolution_clock::now();
-                duration<double, std::milli> ms = now2 - now1;
-                std::cout << testName[i] << " took " << ms.count() << "ms. Max: " << max << std::endl;
-                timeResults[rep * SIZE(permutation) + i] = ms.count();
-                WriteLine("-------------");
-            }
-        }
-
-        std::cout << "\n" << std::endl;
-
-        for (unsigned i = 0; i < SIZE(permutation); i++) {
-            std::cout << testName[i];
-            double sum = 0;
-            for (int j = 0; j < REPETITIONS; j++) {
-                std::cout << " " << timeResults[j * SIZE(permutation) + i] << "ms";
-                sum += timeResults[j * SIZE(permutation) + i];
-            }
-            std::cout << " | avg: " << sum / REPETITIONS << "ms" << std::endl;
-        }
-
-        std::cout << std::endl;
-    }
+    testNQueens();
+    testNQueensOptimization();
+    exit(2);
 }

@@ -4,17 +4,43 @@
 
 class user_propagator_with_theory : public user_propagator {
 
+    std::unordered_map<unsigned, z3::expr> idToExpr;
+    unsigned bitCnt;
+
 public:
 
-    user_propagator_with_theory(z3::context &c, std::unordered_map<z3::expr, unsigned> &idMapping, unsigned board)
-            : user_propagator(c, idMapping, board) {}
+    user_propagator_with_theory(z3::context &c, const z3::expr_vector& queens, unsigned board, bool allSat)
+            : user_propagator(c, queens, board, allSat) {
 
-    user_propagator_with_theory(z3::solver *s, std::unordered_map<z3::expr, unsigned> &idMapping, unsigned board)
-            : user_propagator(s, idMapping, board) {}
+    	for (unsigned i = 0; i < queens.size(); i++) {
+            idToExpr.emplace(i, queens[i]);
+        }
+        bitCnt = queens[0].get_sort().bv_size();
+    }
+
+    user_propagator_with_theory(z3::solver *s, const z3::expr_vector& queens, unsigned board, bool allSat)
+            : user_propagator(s, queens, board, allSat) {
+
+        for (unsigned i = 0; i < queens.size(); i++) {
+            idToExpr.emplace(i, queens[i]);
+        }
+        bitCnt = queens[0].get_sort().bv_size();
+    }
+
+    unsigned setTo = (unsigned)-1;
 
     void fixed(z3::expr const &ast, z3::expr const &value) override {
-        unsigned queenId = queenToY[ast];
+        unsigned queenId = exprToId[ast];
         unsigned queenPos = bvToInt(value);
+
+        if (queenId >= board) {
+            // just a single bit
+            fixedVariables.push_back(ast);
+            currentModel[exprToId[ast]] = queenPos;
+            return;
+        }
+
+        setTo = (unsigned)-1;
 
         if (queenPos >= board) {
             z3::expr_vector conflicting(ast.ctx());
@@ -23,9 +49,9 @@ public:
             return;
         }
 
-        for (const z3::expr &fixed: fixedValues) {
-            unsigned otherId = queenToY[fixed];
-            unsigned otherPos = currentModel[queenToY[fixed]];
+        for (const z3::expr &fixed: fixedVariables) {
+            unsigned otherId = exprToId[fixed];
+            unsigned otherPos = currentModel[exprToId[fixed]];
 
             if (queenPos == otherPos) {
                 z3::expr_vector conflicting(ast.ctx());
@@ -44,7 +70,28 @@ public:
             }
         }
 
-        fixedValues.push_back(ast);
-        currentModel[queenToY[ast]] = queenPos;
+        fixedVariables.push_back(ast);
+        currentModel[exprToId[ast]] = queenPos;
+    }
+
+    bool setLast(z3::expr& val, unsigned& bit, Z3_lbool& is_pos) {
+        if (currentModel[setTo] == (unsigned)-1) {
+            val = idToExpr.at(setTo);
+            bit = 0;
+        	is_pos = (rand() % 2 == 0) ? Z3_L_FALSE : Z3_L_TRUE;
+            is_pos = Z3_L_UNDEF;
+            return true;
+        }
+        return false;
+    }
+
+    void decide(z3::expr& val, unsigned& bit, Z3_lbool& is_pos) override {
+        if (setTo == (unsigned)-1) {
+            setTo = exprToId.at(val);
+        }
+        if (setTo >= board) {
+            setTo = (setTo - board) / bitCnt;
+        }
+        setLast(val, bit, is_pos);
     }
 };
