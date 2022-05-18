@@ -105,8 +105,7 @@ public:
 
 };
 
-int sorting3(unsigned *size) {
-    unsigned cnt = *size;
+int sorting3(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
@@ -115,11 +114,11 @@ int sorting3(unsigned *size) {
     z3::expr_vector out(context);
     z3::expr_vector funcs(context);
 
-    for (unsigned i = 0; i < cnt; i++) {
+    for (unsigned i = 0; i < size; i++) {
         domain.push_back(context.bv_sort(BIT_CNT));
         in.push_back(context.constant((std::string("in") + std::to_string(i)).c_str(), domain[i]));
     }
-    for (unsigned i = 0; i < cnt; i++) {
+    for (unsigned i = 0; i < size; i++) {
         z3::func_decl sorted = context.user_propagate_function(
                 context.str_symbol(("sorted_" + std::to_string(i)).c_str()),
                 domain,
@@ -134,7 +133,7 @@ int sorting3(unsigned *size) {
     s.add(z3::distinct(in));
 
     z3::expr_vector counterOrder(context);
-    for (int i = 0; i < cnt - 1; i++) {
+    for (int i = 0; i < size - 1; i++) {
         counterOrder.push_back(in[i] >= in[i + 1]);
     }
     s.add(z3::mk_and(counterOrder));

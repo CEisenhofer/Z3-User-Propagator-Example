@@ -27,8 +27,7 @@ void checkSorting(const z3::model &model, const z3::expr_vector &in, const z3::e
 
 }
 
-int sorting1(unsigned *size) {
-    unsigned cnt = *size;
+int sorting1(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
@@ -39,7 +38,7 @@ int sorting1(unsigned *size) {
     std::vector<z3::func_decl> firstLevel;
     z3::expr_vector disj(context);
 
-    for (unsigned i = 0; i < cnt; i++) {
+    for (unsigned i = 0; i < size; i++) {
         z3::sort_vector domain(context);
         domain.push_back(context.bv_sort(1));
         z3::func_decl v = context.function((std::string("v_{0,") + std::to_string(i) + "}").c_str(), domain, context.bv_sort(BIT_CNT));
@@ -85,7 +84,7 @@ int sorting1(unsigned *size) {
     }
 
     z3::expr_vector counterOrder(context);
-    for (int i = 0; i < cnt - 1; i++) {
+    for (int i = 0; i < size - 1; i++) {
         counterOrder.push_back(firstLevel[i](0) >= firstLevel[i + 1](0));
     }
     s.add(z3::mk_and(counterOrder));

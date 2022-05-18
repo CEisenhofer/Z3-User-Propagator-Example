@@ -200,21 +200,20 @@ public:
     }
 };
 
-int sorting5(unsigned *size) {
-    unsigned cnt = *size;
+int sorting5(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
     z3::expr_vector inputs(context);
 
-    for (unsigned i = 0; i < cnt; i++) {
+    for (unsigned i = 0; i < size; i++) {
         inputs.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
     }
 
     s.add(z3::distinct(inputs));
 
     z3::expr_vector counterOrder(context);
-    for (int i = 0; i < cnt - 1; i++) {
+    for (int i = 0; i < size - 1; i++) {
         counterOrder.push_back(inputs[i] >= inputs[i + 1]);
     }
     s.add(z3::mk_and(counterOrder));

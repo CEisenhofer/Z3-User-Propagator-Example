@@ -147,23 +147,22 @@ public:
     }
 };
 
-int sorting8(unsigned* size) {
-    unsigned cnt = *size;
+int sorting8(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
-    symbolicNetwork network(cnt);
+    symbolicNetwork network(size);
     z3::expr_vector inputs(context);
 
-    for (unsigned i = 0; i < *size; i++) {
+    for (unsigned i = 0; i < size; i++) {
         inputs.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
     }
 
     // odd-even sort: O(n*log(n)^2)
-    for (unsigned p = 1; p < cnt; p <<= 1) {
+    for (unsigned p = 1; p < size; p <<= 1) {
         for (unsigned k = p; k >= 1; k >>= 1) {
-            for (unsigned j = k % p; j < cnt - k; j += 2 * k) {
-                for (unsigned i = 0; i < MIN(k, cnt - j - k); i++) {
+            for (unsigned j = k % p; j < size - k; j += 2 * k) {
+                for (unsigned i = 0; i < MIN(k, size - j - k); i++) {
                     if ((i + j) / (2 * p) == (i + j + k) / (2 * p)) {
                         network.addComparision(i + j, i + j + k);
                     }
@@ -181,7 +180,7 @@ int sorting8(unsigned* size) {
     s.add(z3::distinct(inputs));
 
     z3::expr_vector counterOrder(context);
-    for (int i = 0; i < cnt - 1; i++) {
+    for (int i = 0; i < size - 1; i++) {
         counterOrder.push_back(inputs[i] >= inputs[i + 1]);
     }
     s.add(z3::mk_and(counterOrder));

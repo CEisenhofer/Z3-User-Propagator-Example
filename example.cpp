@@ -26,7 +26,7 @@
  * Runs 1 + 2 are done for comparison with 3 + 4
  */
 
-typedef int (*benchark_fct)(unsigned[]);
+typedef int (*benchark_fct)();
 
 bool isPrintStatistics = false;
 
@@ -84,7 +84,7 @@ void printStatistics(z3::solver& s) {
 
 }
 
-void benchmark(unsigned *arg, const benchark_fct *testFcts, const char **testNames, unsigned cnt) {
+void benchmark(const benchark_fct *testFcts, const char **testNames, unsigned cnt) {
     unsigned seed = (unsigned)high_resolution_clock::now().time_since_epoch().count();
     auto e = std::default_random_engine(seed);
     std::vector<int> permutation;
@@ -109,7 +109,7 @@ void benchmark(unsigned *arg, const benchark_fct *testFcts, const char **testNam
             z3::set_param("sat.random_seed", (int)random_seed);
             z3::set_param("smt.random_seed", (int)random_seed);
             auto now1 = high_resolution_clock::now();
-            int res = testFcts[i](arg);
+            int res = testFcts[i]();
             auto now2 = high_resolution_clock::now();
             duration<double, std::milli> ms = now2 - now1;
             std::cout << testNames[i] << " took " << ms.count() << "ms";
@@ -226,10 +226,10 @@ void testNQueensOptimization() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                nqueensMaximization1,
-                nqueensMaximization2,
-                nqueensMaximization3,
-                nqueensMaximization4,
+            [num]() { return nqueensMaximization1(num); },
+            [num]() { return nqueensMaximization2(num); },
+            [num]() { return nqueensMaximization3(num); },
+            [num]() { return nqueensMaximization4(num); }
         };
         const char *testNames[] = {
                 "Ordinary/Direct Encoding",
@@ -249,11 +249,12 @@ void testDistinctness() {
 
         std::cout << "num = " << num << ":\n" << std::endl;
 
-        const benchark_fct testFcts[] = {
-                distinct1,
-                distinct2,
-                distinct3,
-                distinct4,
+        unsigned args[2];
+        const benchark_fct testFcts[4] = {
+                [args]() { return distinct1(args[0], args[1]); },
+                [args]() { return distinct2(args[0], args[1]); },
+                [args]() { return distinct3(args[0], args[1]); },
+                [args]() { return distinct4(args[0], args[1]); }
         };
         const char *testNames[] = {
                 "Distinct-O(n^2)",
@@ -263,18 +264,17 @@ void testDistinctness() {
         };
         unsigned bits = log2i(num);
         static_assert(SIZE(testFcts) == SIZE(testNames));
-        unsigned args[2];
         args[0] = num;
         args[1] = (unsigned)std::min((int)num, 32); // enough space
         std::cout << "enough space\n" << std::endl;
-        benchmark(args, testFcts, testNames, SIZE(testFcts));
+        benchmark(testFcts, testNames, SIZE(testFcts));
         args[1] = bits; // 1 : 1
         std::cout << "1:1\n" << std::endl;
-        benchmark(args, testFcts, testNames, SIZE(testFcts));
+        benchmark(testFcts, testNames, SIZE(testFcts));
         if (bits > 1) {
             args[1] = bits - 1; // unsat
             std::cout << "not enough space\n" << std::endl;
-            benchmark(args, testFcts, testNames, SIZE(testFcts));
+            benchmark(testFcts, testNames, SIZE(testFcts));
         }
     }
 }
@@ -287,27 +287,27 @@ void testSorting() {
 
         std::cout << "num = " << num << ":\n" << std::endl;
         const benchark_fct testFcts[] = {
-                //sorting1,
-                sorting2,
-                //sorting3,
-                sorting4,
-                sorting5,
-                //sorting6,
-                sorting7,
-                sorting8,
+                //[num]() { return sorting1(num, disjoint); },
+                [num]() { return sorting2(num, disjoint); },
+                //[num]() { return sorting3(num, disjoint); },
+                //[num]() { return sorting4(num, disjoint); },
+                [num]() { return sorting5(num, disjoint); },
+                [num]() { return sorting6(num, disjoint); },
+                //[num]() { return sorting7(num, disjoint); },
+                [num]() { return sorting8(num, disjoint); },
         };
         const char *testNames[] = {
                 //"Merge-Sort (BMC)",
                 "Direct Sort (Predicate)",
                 //"Direct Sort (Function)",
-                "Insertion-Sort Network",
+                //"Insertion-Sort Network",
                 "Lazy Insertion-Sort Network",
-                //"Permutation",
-                "Odd-Even Sorting Network",
+                "Permutation",
+                //"Odd-Even Sorting Network",
                 "Lazy Odd-Even Sorting Network",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
-        benchmark(&num, testFcts, testNames, SIZE(testFcts));
+        benchmark(testFcts, testNames, SIZE(testFcts));
     }
 }
 

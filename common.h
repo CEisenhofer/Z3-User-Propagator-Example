@@ -89,21 +89,27 @@ int opt_sorting(unsigned* args, Params params = Params());
 
 void checkSorting(const z3::model &model, const z3::expr_vector &in, const z3::expr_vector &out);
 
-int sorting1(unsigned *size);
+enum sortingConstraints : unsigned char {
+    disjoint = 1,
+    inputReverse = 2,
+    outputReverse = 4 //unsat
+};
 
-int sorting2(unsigned *size);
+int sorting1(unsigned size, sortingConstraints constraints);
 
-int sorting3(unsigned *size);
+int sorting2(unsigned size, sortingConstraints constraints);
 
-int sorting4(unsigned *size);
+int sorting3(unsigned size, sortingConstraints constraints);
 
-int sorting5(unsigned *size);
+int sorting4(unsigned size, sortingConstraints constraints);
 
-int sorting6(unsigned *size);
+int sorting5(unsigned size, sortingConstraints constraints);
 
-int sorting7(unsigned *size);
+int sorting6(unsigned size, sortingConstraints constraints);
 
-int sorting8(unsigned *size);
+int sorting7(unsigned size, sortingConstraints constraints);
+
+int sorting8(unsigned size, sortingConstraints constraints);
 
 void disjointness();
 
