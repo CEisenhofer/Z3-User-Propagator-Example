@@ -33,16 +33,15 @@ int sorting7(unsigned size, sortingConstraints constraints) {
         s.add(outputs[i] == outputExpr[i]);
     }
 
-    s.add(z3::distinct(inputs));
+    applyConstraints(s, inputs, outputExpr, constraints);
 
-    z3::expr_vector counterOrder(context);
-    for (int i = 0; i < size - 1; i++) {
-        counterOrder.push_back(inputs[i] >= inputs[i + 1]);
+    z3::check_result result = s.check();
+    if (constraints & outputReverse) {
+        assert(result == z3::unsat);
     }
-    s.add(z3::mk_and(counterOrder));
-
-    s.check();
-    z3::model m = s.get_model();
-    checkSorting(m, inputs, outputs);
+    else {
+        z3::model m = s.get_model();
+        checkSorting(m, inputs, outputExpr);
+    }
     return -1;
 }

@@ -77,23 +77,26 @@ struct Params {
     }
 };
 
-int distinct1(unsigned args[2]);
+int distinct1(unsigned num, unsigned bits);
 
-int distinct2(unsigned args[2]);
+int distinct2(unsigned num, unsigned bits);
 
-int distinct3(unsigned args[2]);
+int distinct3(unsigned num, unsigned bits);
 
-int distinct4(unsigned args[2]);
+int distinct4(unsigned num, unsigned bits);
 
 int opt_sorting(unsigned* args, Params params = Params());
 
 void checkSorting(const z3::model &model, const z3::expr_vector &in, const z3::expr_vector &out);
 
 enum sortingConstraints : unsigned char {
-    disjoint = 1,
-    inputReverse = 2,
-    outputReverse = 4 //unsat
+    inputDisjoint = 1,
+    outputDisjoint = 2,
+    inputReverse = 4,
+    outputReverse = 8 //unsat
 };
+
+void applyConstraints(z3::solver& s, const z3::expr_vector& in, const z3::expr_vector& out, sortingConstraints constraints);
 
 int sorting1(unsigned size, sortingConstraints constraints);
 

@@ -130,18 +130,17 @@ int sorting3(unsigned size, sortingConstraints constraints) {
         out.push_back(o);
     }
 
-    s.add(z3::distinct(in));
-
-    z3::expr_vector counterOrder(context);
-    for (int i = 0; i < size - 1; i++) {
-        counterOrder.push_back(in[i] >= in[i + 1]);
-    }
-    s.add(z3::mk_and(counterOrder));
+    applyConstraints(s, in, out, constraints);
 
     SortedPropagator3 propagator(&s, funcs, in);
 
-    s.check();
-    z3::model m = s.get_model();
-    checkSorting(m, in, out);
+    z3::check_result result = s.check();
+    if (constraints & outputReverse) {
+        assert(result == z3::unsat);
+    }
+    else {
+        z3::model m = s.get_model();
+        checkSorting(m, in, out);
+    }
     return -1;
 }

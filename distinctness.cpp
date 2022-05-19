@@ -154,10 +154,7 @@ public:
     }
 };
 
-int distinct1(unsigned args[2]) {
-
-    unsigned num = args[0];
-    unsigned bits = args[1];
+int distinct1(unsigned num, unsigned bits) {
 
     z3::context context;
     z3::solver s(context, z3::solver::simple());
@@ -180,10 +177,7 @@ int distinct1(unsigned args[2]) {
     return (int)result;
 }
 
-int distinct2(unsigned args[2]) {
-
-    unsigned num = args[0];
-    unsigned bits = args[1];
+int distinct2(unsigned num, unsigned bits) {
 
     z3::context context;
     z3::solver s(context, z3::solver::simple());
@@ -220,11 +214,8 @@ int distinct2(unsigned args[2]) {
     return (int)result;
 }
 
-int distinct3(unsigned args[2]) {
-
-    unsigned num = args[0];
-    unsigned bits = args[1];
-
+int distinct3(unsigned num, unsigned bits) {
+    
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
@@ -245,10 +236,7 @@ int distinct3(unsigned args[2]) {
     return (int)result;
 }
 
-int distinct4(unsigned args[2]) {
-
-    unsigned num = args[0];
-    unsigned bits = args[1];
+int distinct4(unsigned num, unsigned bits) {
 
     z3::context context;
     z3::solver s(context, z3::solver::simple());

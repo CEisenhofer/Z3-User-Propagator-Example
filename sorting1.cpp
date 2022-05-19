@@ -27,6 +27,32 @@ void checkSorting(const z3::model &model, const z3::expr_vector &in, const z3::e
 
 }
 
+void applyConstraints(z3::solver& s, const z3::expr_vector& in, const z3::expr_vector& out, sortingConstraints constraints) {
+    if (constraints == 0)
+        return;
+
+    if (constraints & inputDisjoint) {
+        s.add(z3::distinct(in));
+    }
+    if (constraints & outputDisjoint) {
+        s.add(z3::distinct(out));
+    }
+    if (constraints & inputReverse) {
+        z3::expr_vector counterOrder(s.ctx());
+        for (int i = 0; i < in.size() - 1; i++) {
+            counterOrder.push_back(z3::uge(in[i], in[i + 1]));
+        }
+        s.add(z3::mk_and(counterOrder));
+    }
+    if (constraints & outputReverse) {
+        z3::expr_vector counterOrder(s.ctx());
+        for (int i = 0; i < out.size() - 1; i++) {
+            counterOrder.push_back(z3::ugt(out[i], out[i + 1]));
+        }
+        s.add(z3::mk_and(counterOrder));
+    }
+}
+
 int sorting1(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
@@ -83,20 +109,21 @@ int sorting1(unsigned size, sortingConstraints constraints) {
         subResults.push_back(nextLevel);
     }
 
-    z3::expr_vector counterOrder(context);
-    for (int i = 0; i < size - 1; i++) {
-        counterOrder.push_back(firstLevel[i](0) >= firstLevel[i + 1](0));
-    }
-    s.add(z3::mk_and(counterOrder));
-
-    s.check();
-
-    z3::model m = s.get_model();
     z3::expr_vector in(context), out(context);
     for (unsigned i = 0; i < firstLevel.size(); i++) {
         in.push_back(subResults[0][i](0));
         out.push_back(subResults.back()[0](i));
     }
-    checkSorting(m, in, out);
+
+    applyConstraints(s, in, out, constraints);
+
+    z3::check_result result = s.check();
+    if (constraints & outputReverse) {
+        assert(result == z3::unsat);
+    }
+    else {
+        z3::model m = s.get_model();
+        checkSorting(m, in, out);
+    }
     return -1;
 }

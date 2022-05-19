@@ -12,6 +12,8 @@ class LazySortingNetworkPropagator : public z3::user_propagator_base {
 
     std::vector<z3::expr_vector> nodes;
 
+    const bool forward = true, backward = true;
+
     inline z3::expr createNode(unsigned line, unsigned pos) {
         assert(!nodes.empty() && !nodes[0].empty());
         return ctx().constant((std::string("!x_{") + std::to_string(line) + "," + std::to_string(pos) + "}").c_str(), nodes[0][0].get_sort());
@@ -44,12 +46,16 @@ public:
 
     LazySortingNetworkPropagator(z3::solver* s, const symbolicNetwork& network, const z3::expr_vector& inputs) : user_propagator_base(s), network(network) {
 
+        assert(forward || backward);
+
         this->register_fixed();
 
         for (unsigned i = 0; i < inputs.size(); i++) {
             nodes.emplace_back(s->ctx());
             nodes[i].push_back(inputs[i]);
-            this->add(inputs[i]);
+
+        	if (forward)
+				this->add(inputs[i]);
 
             astToPosition.emplace(inputs[i], encodePosition(i, 0));
             positionToAst.emplace(encodePosition(i, 0), inputs[i]);
@@ -60,6 +66,9 @@ public:
                 astToPosition.emplace(e, encodePosition(i, j + 1));
                 positionToAst.emplace(encodePosition(i, j + 1), e);
             }
+
+            if (backward)
+                this->add(nodes[i].back());
         }
     }
 
@@ -86,53 +95,64 @@ public:
         unsigned line, pos;
         decodePosition(p, line, pos);
         model.emplace(p, val);
+        const z3::expr_vector empty(ctx());
 
-        if (pos + 1 >= nodes[line].size()) {
-            // node is already an output node
-            return;
+    	if (pos + 1 < nodes[line].size()) { // not an output 
+            destination destination = network.getDestination(line, pos);
+            unsigned siblingVal;
+            if (getModelValue(destination.line, destination.position, siblingVal)) {
+                // forward propagation
+                const auto& nextAst = positionToAst.at(encodePosition(line, pos + 1));
+                const auto& siblingAst = positionToAst.at(encodePosition(destination.line, destination.position));
+                const auto& siblingNextAst = positionToAst.at(encodePosition(destination.line, destination.position + 1));
+
+                // we register them always in case it is not an output node. Z3 will anyway check if they have been registered already
+                if (pos + 1 <= nodes[line].size())
+                    this->add(nextAst);
+                if (destination.position + 1 <= nodes[destination.line].size())
+                    this->add(siblingNextAst);
+
+                if (val == siblingVal || ((line < destination.line) == (val < siblingVal))) {
+                    // already ordered correctly
+                    // simply pass them through
+                    if (line <= destination.line) {
+                        this->propagate(empty, z3::implies(z3::ule(ast, siblingAst), nextAst == ast && siblingNextAst == siblingAst));
+                    }
+                    else {
+                        this->propagate(empty, z3::implies(z3::ule(siblingAst, ast), nextAst == ast && siblingNextAst == siblingAst));
+                    }
+                }
+                else {
+                    // not ordered correctly
+                    // add if-then-else
+                    if (line <= destination.line) {
+                        this->propagate(empty, z3::ite(z3::ule(ast, siblingAst),
+                            nextAst == ast && siblingNextAst == siblingAst,
+                            nextAst == siblingAst && siblingNextAst == ast));
+                    }
+                    else {
+                        this->propagate(empty, z3::ite(z3::ule(siblingAst, ast),
+                            nextAst == ast && siblingNextAst == siblingAst,
+                            nextAst == siblingAst && siblingNextAst == ast));
+                    }
+                }
+            }
         }
+        if (pos > 0) { // not an input
+            destination destination = network.getDestination(line, pos - 1);
+            // backward propagation
+            const auto& prevAst = positionToAst.at(encodePosition(line, pos - 1));
+            const auto& prevSiblingAst = positionToAst.at(encodePosition(destination.line, destination.position));
 
-        // get other input of next comparison
-        destination destination = network.getDestination(line, pos);
-        unsigned siblingVal;
+            // we register them always in case it is not an input node. Z3 will anyway check if they have been registered already
+            if (pos - 1 > 0)
+                this->add(prevAst);
+            if (destination.position > 0)
+                this->add(prevSiblingAst);
 
-    	if (getModelValue(destination.line, destination.position, siblingVal)) {
-            // forward propagation
-            z3::expr_vector empty(ctx());
-            const auto& nextAst = positionToAst.at(encodePosition(line, pos + 1));
-            const auto& siblingAst = positionToAst.at(encodePosition(destination.line, destination.position));
-            const auto& siblingNextAst = positionToAst.at(encodePosition(destination.line, destination.position + 1));
-
-            // we register them always in case it is not an output node. Z3 will anyway check if they have been registered already
-            if (pos + 1 <= nodes[line].size())
-                this->add(nextAst);
-            if (destination.position + 1 <= nodes[destination.line].size())
-                this->add(siblingNextAst);
-
-            if (val == siblingVal || ((line < destination.line) == (val < siblingVal))) {
-                // already ordered correctly
-                // simply pass them through
-                if (line <= destination.line) {
-                    this->propagate(empty, z3::implies(z3::ule(ast, siblingAst), nextAst == ast && siblingNextAst == siblingAst));
-                }
-                else {
-                    this->propagate(empty, z3::implies(z3::ule(siblingAst, ast), nextAst == ast && siblingNextAst == siblingAst));
-                }
-            }
-            else {
-                // not ordered correctly
-                // add if-then-else
-                if (line <= destination.line) {
-                	this->propagate(empty, z3::ite(z3::ule(ast, siblingAst),
-                        nextAst == ast && siblingNextAst == siblingAst,
-                        nextAst == siblingAst && siblingNextAst == ast));
-                }
-                else {
-                    this->propagate(empty, z3::ite(z3::ule(siblingAst, ast),
-                        nextAst == ast && siblingNextAst == siblingAst,
-                        nextAst == siblingAst && siblingNextAst == ast));
-                }
-            }
+            this->propagate(empty, z3::ite(z3::ule(prevAst, prevSiblingAst),
+                ast == (line < destination.line ? prevAst : prevSiblingAst),
+                ast == (line < destination.line ? prevSiblingAst : prevAst)));
         }
     }
 
@@ -176,19 +196,18 @@ int sorting8(unsigned size, sortingConstraints constraints) {
         }
     }*/
 
-
-    s.add(z3::distinct(inputs));
-
-    z3::expr_vector counterOrder(context);
-    for (int i = 0; i < size - 1; i++) {
-        counterOrder.push_back(inputs[i] >= inputs[i + 1]);
-    }
-    s.add(z3::mk_and(counterOrder));
-
     LazySortingNetworkPropagator propagator(&s, network, inputs);
 
-    s.check();
-    z3::model m = s.get_model();
-    checkSorting(m, inputs, propagator.getOutputs());
+    applyConstraints(s, inputs, propagator.getOutputs(), constraints);
+
+
+    z3::check_result result = s.check();
+    if (constraints & outputReverse) {
+        assert(result == z3::unsat);
+    }
+    else {
+        z3::model m = s.get_model();
+        checkSorting(m, inputs, propagator.getOutputs());
+    }
     return -1;
 }

@@ -165,19 +165,19 @@ int sorting2(unsigned size, sortingConstraints constraints) {
     z3::func_decl sorted = context.user_propagate_function(context.str_symbol("sorted"), domain, context.bool_sort());
 
     auto func = sorted(args);
-
-    s.add(z3::distinct(in));
     s.add(func);
-    z3::expr_vector counterOrder(context);
-    for (int i = 0; i < size - 1; i++) {
-        counterOrder.push_back(in[i] >= in[i + 1]);
-    }
-    s.add(z3::mk_and(counterOrder));
+
+    applyConstraints(s, in, out, constraints);
 
     SortedPropagator propagator(&s, func, in, out);
 
-    s.check();
-    z3::model m = s.get_model();
-    checkSorting(m, in, out);
+    z3::check_result result = s.check();
+    if (constraints & outputReverse) {
+        assert(result == z3::unsat);
+    }
+    else {
+        z3::model m = s.get_model();
+        checkSorting(m, in, out);
+    }
     return -1;
 }

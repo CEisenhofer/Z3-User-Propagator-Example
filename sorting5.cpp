@@ -210,18 +210,18 @@ int sorting5(unsigned size, sortingConstraints constraints) {
         inputs.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
     }
 
-    s.add(z3::distinct(inputs));
-
-    z3::expr_vector counterOrder(context);
-    for (int i = 0; i < size - 1; i++) {
-        counterOrder.push_back(inputs[i] >= inputs[i + 1]);
-    }
-    s.add(z3::mk_and(counterOrder));
-
     SortedPropagator5 propagator(&s, inputs);
 
-    s.check();
-    z3::model m = s.get_model();
-    checkSorting(m, inputs, propagator.getOutputs());
+    applyConstraints(s, inputs, propagator.getOutputs(), constraints);
+
+
+    z3::check_result result = s.check();
+    if (constraints & outputReverse) {
+        assert(result == z3::unsat);
+    }
+    else {
+        z3::model m = s.get_model();
+        checkSorting(m, inputs, propagator.getOutputs());
+    }
     return -1;
 }
