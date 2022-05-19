@@ -62,7 +62,7 @@ static z3::expr createConstraintsBool(z3::context& context, const z3::expr_vecto
     for (unsigned y = 0; y < board; y++) {
         tiles.emplace_back(context);
         for (unsigned x = 0; x < board; x++) {
-            tiles.back().push_back(queens[x * board + x]);
+            tiles.back().push_back(queens[x * board + y]);
         }
     }
     z3::expr_vector assertions(context);
@@ -72,17 +72,17 @@ static z3::expr createConstraintsBool(z3::context& context, const z3::expr_vecto
         assertions.push_back(z3::mk_or(tiles[i]));
 
         // in every column at least one tile is occupied
-        /*z3::expr_vector atLeastOne(context);
+        z3::expr_vector atLeastOne(context);
         for (unsigned j = 0; j < board; j++) {
             atLeastOne.push_back(tiles[j][i]);
         }
-        assertions.push_back(z3::mk_or(atLeastOne));*/
+        assertions.push_back(z3::mk_or(atLeastOne));
 
         // in every line/column no two tiles are occupied
         for (unsigned j1 = 0; j1 < board; j1++) {
             for (unsigned j2 = j1 + 1; j2 < board; j2++) {
-                assertions.push_back(!tiles[i][j1] || !tiles[i][j1]);
-                assertions.push_back(!tiles[j1][i] || !tiles[j1][i]);
+                assertions.push_back(!tiles[i][j1] || !tiles[i][j2]);
+                assertions.push_back(!tiles[j1][i] || !tiles[j2][i]);
             }
         }
     }
@@ -101,8 +101,6 @@ static z3::expr createConstraintsBool(z3::context& context, const z3::expr_vecto
             }
         }
     }
-    
-
     return z3::mk_and(assertions);
 }
 
@@ -188,8 +186,8 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
         propagator = new user_propagator_with_theory(&solver, queens, board, addConflict);
     }
 
-    /*if (withDecide)
-        propagator->register_decide();*/
+    if (withDecide)
+        propagator->register_decide();
 
     if (!withTheory) {
         if (!pureSAT) {
@@ -200,14 +198,19 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
         }
     }
 
-    if (!addConflict && !singleSolution)
-        return enumerateSolutions(context, solver, queens);
+    int res;
 
-    solver.check();
-    const int res = propagator->getModelCount();
+    if (!addConflict && !singleSolution) {
+        res = enumerateSolutions(context, solver, queens);
+    }
+    else {
+        solver.check();
+        res = propagator->getModelCount();
+    }
+
     delete propagator;
-
     printStatistics(solver);
+
     return res;
 }
 
