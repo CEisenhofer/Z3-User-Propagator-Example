@@ -18,9 +18,9 @@ using namespace std::chrono;
 
 #define REPETITIONS 1
 
-#define MIN_BOARD 49
-#define MAX_BOARD1 50
-#define MAX_BOARD2 50
+#define MIN_BOARD 4
+#define MAX_BOARD1 13
+#define MAX_BOARD2 13
 
 #define SORT_CNT 128
 #define BIT_CNT 32
@@ -116,9 +116,11 @@ int sorting8(unsigned size, sortingConstraints constraints);
 
 void disjointness();
 
-int nqueensNoPropagator(unsigned num, bool simple);
+int nqueensNoPropagatorSAT(unsigned board);
 
-int nqueensPropagator(unsigned num, bool singleSolution, bool addConflicts, bool withTheory, bool withDecide);
+int nqueensNoPropagatorBV(unsigned board);
+
+int nqueensPropagator(unsigned board, bool singleSolution, bool addConflicts, bool pureSAT, bool withTheory, bool withDecide);
 
 int nqueensMaximization1(unsigned *num);
 
@@ -129,27 +131,31 @@ int nqueensMaximization3(unsigned *num);
 int nqueensMaximization4(unsigned *num);
 
 inline int nqueensNoPropagator1(unsigned *num) {
-    return nqueensNoPropagator(*num, false);
+    return nqueensNoPropagatorSAT(*num);
 }
 
 inline int nqueensNoPropagator2(unsigned *num) {
-    return nqueensNoPropagator(*num, true);
+    return nqueensNoPropagatorBV(*num);
 }
 
 inline int nqueensNoPropagator3(unsigned* num) {
-    return nqueensPropagator(*num, false, false, false, true);
+    return nqueensPropagator(*num, false, false, false, false, true);
 }
 
-inline int nqueensPropagator1(unsigned *num) {
-    return nqueensPropagator(*num, false, true, false, false);
+inline int nqueensPropagator1(unsigned* num) {
+    return nqueensPropagator(*num, false, true, true, false, false);
 }
 
 inline int nqueensPropagator2(unsigned *num) {
-    return nqueensPropagator(*num, false, true, true, false);
+    return nqueensPropagator(*num, false, true, false, false, false);
 }
 
-inline int nqueensPropagator3(unsigned* num) {
-    return nqueensPropagator(*num, false, true, true, true);
+inline int nqueensPropagator3(unsigned *num) {
+    return nqueensPropagator(*num, false, true, false, true, false);
+}
+
+inline int nqueensPropagator4(unsigned* num) {
+    return nqueensPropagator(*num, false, true, false, true, true);
 }
 
 int nqueensHigherDimensionAllCover(unsigned args[2]);

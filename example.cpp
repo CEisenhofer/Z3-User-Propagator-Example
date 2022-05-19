@@ -4,7 +4,28 @@
 #include <conio.h>
 #define getch() _getch()
 #else
-#define getch() exit(9)
+#include <termios.h>
+#include <stdio.h>
+
+static struct termios old, current;
+
+char getch() {
+    char ch;
+    tcgetattr(0, &old);
+    current = old;
+    current.c_lflag &= ~ICANON;
+    if (echo) {
+        current.c_lflag |= ECHO;
+    }
+    else {
+        current.c_lflag &= ~ECHO;
+    }
+    tcsetattr(0, TCSANOW, &current);
+    ch = getchar();
+    tcsetattr(0, TCSANOW, &old);
+    return ch;
+}
+
 #endif
 
 
@@ -169,24 +190,24 @@ void testNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                nqueensNoPropagator1,
-                nqueensNoPropagator2,
+                //nqueensNoPropagator1,
+                //nqueensNoPropagator2,
                 nqueensNoPropagator3,
-                nqueensPropagator1,
-                nqueensPropagator2
-                //nqueensPropagator3,
+                //nqueensPropagator1,
+                //nqueensPropagator2,
+                //nqueensPropagator3
+                //nqueensPropagator4,
         };
         const char *testNames[] = {
-                "BV + Blocking clauses (Default solver)",
-                "BV + Blocking clauses (Simple solver)",
+                //"Bool + Blocking clauses",
+                //"BV + Blocking clauses",
                 "BV + Blocking clauses + Useless Propagator",
-                "BV + Adding conflicts",
-                "Custom theory + conflicts",
+                //"Bool + Adding conflicts",
+                //"BV + Adding conflicts",
+                //"Custom theory + conflicts",
                 //"Custom theory + conflicts + ordered",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
-        if (num == 11)
-            isPrintStatistics = true;
         benchmark(&num, testFcts, testNames, SIZE(testFcts));
         isPrintStatistics = false;
     }
@@ -200,10 +221,12 @@ void testSingleNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, true, false); },
         };
         const char* testNames[] = {
+                "Bool + Adding conflicts",
                 "BV + Adding conflicts",
                 "Custom theory + conflicts",
         };
@@ -422,6 +445,9 @@ int main() {
     SetConsoleScreenBufferSize(con, csbi.dwSize);
 #endif
 
+    testNQueens();
+    getch();
+
     //z3::context _ctx;
     //z3::solver _s(_ctx, z3::solver::simple());
     //Test t(&_s);
@@ -431,10 +457,10 @@ int main() {
 
     testSorting();
 
-    _getch();
+    getch();
     //testSingleNQueens();
     //testNQueens();
-    _getch();
+    getch();
 
     z3::set_param("smt.mbqi.max_iterations", 100000000);
 

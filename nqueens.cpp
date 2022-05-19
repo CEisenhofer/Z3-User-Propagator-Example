@@ -3,26 +3,37 @@
 #include "user_propagator_subquery_maximisation.h"
 #include "user_propagator_higher_dimension.h"
 
-static z3::expr_vector createQueens(z3::context &context, unsigned num, int bits, std::string prefix) {
+static z3::expr_vector createQueens(z3::context &context, unsigned board, int bits, std::string prefix) {
     z3::expr_vector queens(context);
-    for (unsigned i = 0; i < num; i++) {
+    for (unsigned i = 0; i < board; i++) {
         queens.push_back(context.bv_const((prefix + "q" + to_string(i)).c_str(), bits));
     }
     return queens;
 }
 
-static z3::expr_vector createQueens(z3::context &context, unsigned num) {
-    return createQueens(context, num, log2i(num) + 1, "");
+static z3::expr_vector createQueens(z3::context &context, unsigned board) {
+    return createQueens(context, board, log2i(board) + 1, "");
 }
 
-static z3::expr createConstraints(z3::context &context, const z3::expr_vector &queens) {
+static z3::expr_vector createTiles(z3::context& context, unsigned board) {
+    z3::expr_vector queens(context);
+    for (unsigned y = 0; y < board; y++) {
+        for (unsigned x = 0; x < board; x++) {
+            queens.push_back(context.bool_const(("q_{" + to_string(x) + "," + to_string(y) + "}").c_str()));
+        }
+    }
+    return queens;
+}
+
+static z3::expr createConstraintsBV(z3::context &context, const z3::expr_vector &queens) {
     z3::expr_vector assertions(context);
+    // assert column range
     for (unsigned i = 0; i < queens.size(); i++) {
-        // assert column range
         assertions.push_back(z3::uge(queens[i], 0));
         assertions.push_back(z3::ule(queens[i], (int)(queens.size() - 1)));
     }
 
+    // no queens may attack vertically
     z3::expr_vector distinct(context);
     for (const z3::expr &queen: queens) {
         distinct.push_back(queen);
@@ -30,12 +41,67 @@ static z3::expr createConstraints(z3::context &context, const z3::expr_vector &q
 
     assertions.push_back(z3::distinct(distinct));
 
+    // no queens may attack diagonally
+
     for (unsigned i = 0; i < queens.size(); i++) {
         for (unsigned j = i + 1; j < queens.size(); j++) {
             assertions.push_back((int)(j - i) != (queens[j] - queens[i]));
             assertions.push_back((int)(j - i) != (queens[i] - queens[j]));
         }
     }
+
+    return z3::mk_and(assertions);
+}
+
+
+static z3::expr createConstraintsBool(z3::context& context, const z3::expr_vector& queens, const unsigned board) {
+
+    assert(queens.size() == board * board);
+
+    std::vector<z3::expr_vector> tiles;
+    for (unsigned y = 0; y < board; y++) {
+        tiles.emplace_back(context);
+        for (unsigned x = 0; x < board; x++) {
+            tiles.back().push_back(queens[x * board + x]);
+        }
+    }
+    z3::expr_vector assertions(context);
+
+    for (unsigned i = 0; i < board; i++) {
+        // in every line at least one tile is occupied
+        assertions.push_back(z3::mk_or(tiles[i]));
+
+        // in every column at least one tile is occupied
+        /*z3::expr_vector atLeastOne(context);
+        for (unsigned j = 0; j < board; j++) {
+            atLeastOne.push_back(tiles[j][i]);
+        }
+        assertions.push_back(z3::mk_or(atLeastOne));*/
+
+        // in every line/column no two tiles are occupied
+        for (unsigned j1 = 0; j1 < board; j1++) {
+            for (unsigned j2 = j1 + 1; j2 < board; j2++) {
+                assertions.push_back(!tiles[i][j1] || !tiles[i][j1]);
+                assertions.push_back(!tiles[j1][i] || !tiles[j1][i]);
+            }
+        }
+    }
+
+    // no two queens may attack on a diagonal
+    for (unsigned i = 0; i < 2 * board - 1; i++) {
+        const unsigned x = i < board ? i : 0;
+        const unsigned y = i >= board ? i - board + 1 : 0;
+
+        const unsigned length = board - (i % board + i / board);
+
+        for (unsigned j1 = 0; j1 < length; j1++) {
+            for (unsigned j2 = j1 + 1; j2 < length; j2++) {
+                assertions.push_back(!tiles[y + j1][x + j1] || !tiles[y + j2][x + j2]);
+                assertions.push_back(!tiles[y + j1][board - 1 - x - j1] || !tiles[y + j2][board - 1 - x - j2]);
+            }
+        }
+    }
+    
 
     return z3::mk_and(assertions);
 }
@@ -72,42 +138,67 @@ int enumerateSolutions(z3::context& context, z3::solver& solver, const z3::expr_
     return solutionId;
 }
 
-int nqueensNoPropagator(unsigned num, bool simple) {
+int nqueensNoPropagatorSAT(unsigned board) {
     z3::context context;
-    z3::solver solver(context, !simple ? Z3_mk_solver(context) : Z3_mk_simple_solver(context));
+    z3::solver solver(context, z3::solver::simple());
 
-    z3::expr_vector queens = createQueens(context, num);
+    z3::expr_vector queens = createTiles(context, board);
 
-    solver.add(createConstraints(context, queens));
+    solver.add(createConstraintsBool(context, queens, board));
 
     return enumerateSolutions(context, solver, queens);
 }
 
-int nqueensPropagator(unsigned num, bool singleSolution, bool addConflict, bool withTheory, bool withDecide) {
+int nqueensNoPropagatorBV(unsigned board) {
+    z3::context context;
+    z3::solver solver(context, Z3_mk_simple_solver(context));
+
+    z3::expr_vector queens = createQueens(context, board);
+
+    solver.add(createConstraintsBV(context, queens));
+
+    return enumerateSolutions(context, solver, queens);
+}
+
+int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, bool pureSAT, bool withTheory, bool withDecide) {
 
     if (singleSolution)
         addConflict = false;
 
+    if (withTheory)
+        pureSAT = false;
+
     z3::context context;
     z3::solver solver(context, z3::solver::simple());
-    std::unordered_map<z3::expr, unsigned> queenToY;
-
-    z3::expr_vector queens = createQueens(context, num);
+    
+    z3::expr_vector queens(context);
+    if (!pureSAT) {
+        queens = createQueens(context, board);
+    }
+    else {
+        queens = createTiles(context, board);
+    }
 
     user_propagator* propagator;
 
     if (!withTheory) {
-        propagator = new user_propagator(&solver, queens, num, addConflict);
+        propagator = new user_propagator(&solver, queens, board, addConflict);
     }
     else {
-        propagator = new user_propagator_with_theory(&solver, queens, num, addConflict);
+        propagator = new user_propagator_with_theory(&solver, queens, board, addConflict);
     }
 
-    if (withDecide)
-        propagator->register_decide();
+    /*if (withDecide)
+        propagator->register_decide();*/
 
-    if (!withTheory)
-        solver.add(createConstraints(context, queens));
+    if (!withTheory) {
+        if (!pureSAT) {
+            solver.add(createConstraintsBV(context, queens));
+        }
+        else {
+            solver.add(createConstraintsBool(context, queens, board));
+        }
+    }
 
     if (!addConflict && !singleSolution)
         return enumerateSolutions(context, solver, queens);
@@ -127,11 +218,11 @@ int nqueensMaximization1(unsigned *num) {
 
     z3::expr_vector queens1 = createQueens(context, n, log2i(n * n), ""); // square to avoid overflow during summation
 
-    z3::expr valid1 = createConstraints(context, queens1);
+    z3::expr valid1 = createConstraintsBV(context, queens1);
 
     z3::expr_vector queens2 = createQueens(context, n, log2i(n * n), "forall_");
 
-    z3::expr valid2 = createConstraints(context, queens2);
+    z3::expr valid2 = createConstraintsBV(context, queens2);
 
     z3::expr manhattanSum1 = context.bv_val(0, queens1[0].get_sort().bv_size());
     z3::expr manhattanSum2 = context.bv_val(0, queens2[0].get_sort().bv_size());
@@ -168,7 +259,7 @@ int nqueensMaximization2(unsigned *num) {
     
     z3::expr_vector queens = createQueens(context, n, log2i(n * n), "");
 
-    solver.add(createConstraints(context, queens));
+    solver.add(createConstraintsBV(context, queens));
 
     user_propagator_subquery_maximisation propagator(&solver, n, queens);
 
@@ -196,7 +287,7 @@ int nqueensMaximization3(unsigned *num) {
 
     z3::expr_vector queens = createQueens(context, n, log2i(n * n), "");
 
-    solver.add(createConstraints(context, queens));
+    solver.add(createConstraintsBV(context, queens));
 
     user_propagator_internal_maximisation propagator(&solver, idMapping, n, queens);
 
