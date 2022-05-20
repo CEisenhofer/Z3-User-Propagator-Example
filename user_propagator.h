@@ -83,12 +83,15 @@ public:
         fixedCnt.push((unsigned)fixedVariables.size());
     }
 
+    virtual void unset(const z3::expr& ast) { }
+
     void pop(unsigned num_scopes) override {
         for (unsigned i = 0; i < num_scopes; i++) {
             unsigned lastCnt = fixedCnt.top();
             fixedCnt.pop();
             // Remove fixed values from model
             for (unsigned j = fixedVariables.size(); j > lastCnt; j--) {
+                unset(fixedVariables[j - 1]);
                 currentModel[exprToId[fixedVariables[j - 1]]] = (unsigned)-1;
             }
             fixedVariables.resize(lastCnt);

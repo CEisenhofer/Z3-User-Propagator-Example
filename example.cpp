@@ -190,22 +190,24 @@ void testNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                nqueensNoPropagator1,
-                nqueensNoPropagator2,
-                nqueensNoPropagator3,
+                //nqueensNoPropagator1,
+                //nqueensNoPropagator2,
+                //nqueensNoPropagator3,
                 nqueensPropagator1,
-                nqueensPropagator2,
-                nqueensPropagator3
+                //nqueensPropagator2,
+                nqueensPropagator3,
                 //nqueensPropagator4,
+                nqueensPropagator5,
         };
         const char *testNames[] = {
-                "Bool + Blocking clauses",
-                "BV + Blocking clauses",
-                "BV + Blocking clauses + Useless Propagator",
+                //"Bool + Blocking clauses",
+                //"BV + Blocking clauses",
+                //"BV + Blocking clauses + Useless Propagator",
                 "Bool + Adding conflicts",
-                "BV + Adding conflicts",
-                "Custom theory + conflicts",
-                //"Custom theory + conflicts + ordered",
+                //"BV + Adding conflicts",
+                "Custom BV theory + conflicts",
+                //"Custom BV theory + conflicts + ordered",
+                "Custom Bool theory + conflicts",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         benchmark(&num, testFcts, testNames, SIZE(testFcts));

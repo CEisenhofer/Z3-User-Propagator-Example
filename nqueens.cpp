@@ -1,3 +1,4 @@
+#include "user_propagator_with_theory2.h"
 #include "user_propagator_created_maximisation.h"
 #include "user_propagator_internal_maximisation.h"
 #include "user_propagator_subquery_maximisation.h"
@@ -163,9 +164,6 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
     if (singleSolution)
         addConflict = false;
 
-    if (withTheory)
-        pureSAT = false;
-
     z3::context context;
     z3::solver solver(context, z3::solver::simple());
     
@@ -180,10 +178,13 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
     user_propagator* propagator;
 
     if (!withTheory) {
-        propagator = new user_propagator(&solver, queens, board, addConflict);
+    	propagator = new user_propagator(&solver, queens, board, addConflict);
     }
     else {
-        propagator = new user_propagator_with_theory(&solver, queens, board, addConflict);
+        if (!pureSAT)
+            propagator = new user_propagator_with_theory(&solver, queens, board, addConflict);
+        else
+            propagator = new user_propagator_with_theory2(&solver, queens, board, addConflict);
     }
 
     if (withDecide)

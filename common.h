@@ -158,6 +158,10 @@ inline int nqueensPropagator4(unsigned* num) {
     return nqueensPropagator(*num, false, true, false, true, true);
 }
 
+inline int nqueensPropagator5(unsigned* num) {
+    return nqueensPropagator(*num, false, true, true, true, true);
+}
+
 int nqueensHigherDimensionAllCover(unsigned args[2]);
 
 void printStatistics(z3::solver& s);
