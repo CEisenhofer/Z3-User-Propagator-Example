@@ -190,24 +190,26 @@ void testNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                //nqueensNoPropagator1,
                 //nqueensNoPropagator2,
                 //nqueensNoPropagator3,
-                nqueensPropagator1,
+                //nqueensNoPropagator1,
                 //nqueensPropagator2,
-                nqueensPropagator3,
+                nqueensPropagator1,
+                //nqueensPropagator3,
                 //nqueensPropagator4,
                 nqueensPropagator5,
+                nqueensPropagator6,
         };
         const char *testNames[] = {
-                //"Bool + Blocking clauses",
-                //"BV + Blocking clauses",
-                //"BV + Blocking clauses + Useless Propagator",
-                "Bool + Adding conflicts",
-                //"BV + Adding conflicts",
-                "Custom BV theory + conflicts",
-                //"Custom BV theory + conflicts + ordered",
-                "Custom Bool theory + conflicts",
+                //"Eager BV + Blocking clauses",
+                //"Eager BV + Blocking clauses + Useless Propagator",
+                //"Eager Bool + Blocking clauses",
+                //"Eager BV + final conflicts",
+                "Eager Bool + final conflicts",
+                //"Lazy BV theory + final conflicts",
+                //"Lazy BV theory + final conflicts + ordered",
+                "Lazy Bool theory + final conflicts",
+                "Lazy Bool theory + final conflicts + decide",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         benchmark(&num, testFcts, testNames, SIZE(testFcts));
@@ -223,14 +225,18 @@ void testSingleNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false); },
                 [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false); },
                 [](unsigned* num) { return nqueensPropagator(*num, true, false, false, true, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, true); },
         };
         const char* testNames[] = {
-                "Bool + Adding conflicts",
-                "BV + Adding conflicts",
-                "Custom theory + conflicts",
+                "Eager BV",
+                "Eager Bool",
+                "Lazy BV",
+                "Lazy Bool",
+                "Lazy Bool + decide",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         if (num == 50)
@@ -340,28 +346,70 @@ struct Test: z3::user_propagator_base {
 
     Test(z3::solver* s) : user_propagator_base(s) {
         this->register_fixed();
+        this->register_final();
         this->register_decide();
+        this->register_eq();
+    	Z3_solver_propagate_diseq(ctx(), *s, diseq_eh);
+
         z3::expr unregistered = ctx().bool_const("unregistered");
         z3::expr a = ctx().bool_const("a");
         z3::expr b = ctx().bool_const("b");
         z3::expr c = ctx().bool_const("c");
         z3::expr d = ctx().bv_const("d", 3);
         z3::expr e = ctx().bv_const("e", 3);
+        z3::expr g = ctx().bool_const("g");
+        z3::expr h = ctx().bool_const("h");
         z3::expr x = ctx().int_const("x");
         z3::expr y = ctx().int_const("y");
-        //s->add(((a || b) || c || unregistered /*|| x + y == 2*/) && d == e);
+        z3::expr z = ctx().int_const("z");
+
+        //z3::sort_vector domain(ctx());
+        //domain.push_back(ctx().int_sort());
+        //z3::func_decl f = ctx().function(ctx().str_symbol("f"), domain, domain.back());
+        //s->add(((a || b) || c || unregistered || x + y == 2) && d == e && f == g && y != x && z >= x && z <= x);
+        s->add(x >= 2);
         s->add(a || b);
-        //this->add(a);
-        //this->add(b);
-        //this->add(c);
+        s->add(g || h);
+        this->add(a);
+        this->add(b);
+        std::cout << (a || b).simplify().to_string() << std::endl;
+        std::cout << (g || h).simplify().to_string() << std::endl;
+        this->add(g);
+        this->add(h);
+        //s->add((z >= x && z <= x) || (y >= z && y <= z) || (x >= z && x <= z) && f(x) > 0 && f(y) > 0 && f(z) > 0 && f(z) != z);
+        //this->add(f(x));
+    	//this->add(f(y));
+        //this->add(f(z));
+
+        //s->add(a || b);
+        /*this->add(a);
+        this->add(b);
+        this->add(c);
         this->add(a || b);
-        //this->add(d);
-        //this->add(e);
-        //this->add(d == e);
-        //this->add(x + y == 2);
+        this->add(d);
+        this->add(e);
+        this->add(d == e);
+        this->add(g);
+        this->add(h);
+        this->add(x + y == 2);*/
+        /*this->add(x);
+        this->add(y);
+        this->add(z);*/
+
+        /*for (unsigned i = 0; i < 10; i++) {
+            z3::expr z = ctx().bool_const(("z" + std::to_string(i + 1)).c_str());
+            this->add(z);
+            s->add(z);
+        }*/
     }
 
-    void push() override {
+	void final() override {
+        //z3::expr_vector empty(ctx());
+        //this->propagate(empty, !ctx().bool_const("g"));
+        //this->propagate(empty, !ctx().bool_const("h"));
+    }
+
+	void push() override {
         std::cout << "Push" << std::endl;
     }
 
@@ -381,7 +429,17 @@ struct Test: z3::user_propagator_base {
         bit = 0;
     }
 
-    user_propagator_base* fresh(z3::context& ctx) override { return this; }
+	void eq(z3::expr const& lhs, z3::expr const& rhs) override {
+        std::cout << "Eq " + lhs.to_string() + " = " + rhs.to_string() << std::endl;
+    }
+
+    static void diseq_eh(void* _p, Z3_solver_callback cb, Z3_ast _x, Z3_ast _y) {
+        Test* p = static_cast<Test*>(_p);
+        z3::expr x(p->ctx(), _x), y(p->ctx(), _y);
+        std::cout << "Diseq " + x.to_string() + " != " + y.to_string() << std::endl;
+    }
+
+	user_propagator_base* fresh(z3::context& ctx) override { return this; }
 
 };
 
@@ -447,15 +505,20 @@ int main() {
     SetConsoleScreenBufferSize(con, csbi.dwSize);
 #endif
 
-    testNQueens();
-    getch();
 
-    //z3::context _ctx;
-    //z3::solver _s(_ctx, z3::solver::simple());
+
+    z3::context _ctx;
+	z3::solver _s(_ctx, z3::solver::simple());
+    
     //Test t(&_s);
     //_s.check();
+    //std::cout << _s.get_model() << std::endl;
 
     // z3::set_param("smt.bv.eq_axioms", false);
+
+    //getch();
+    testNQueens();
+    getch();
 
     testSorting();
 

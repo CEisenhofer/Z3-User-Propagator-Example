@@ -36,14 +36,14 @@ public:
         if (queenId >= board) {
             // just a single bit
             fixedVariables.push_back(ast);
-            currentModel[exprToId[ast]] = queenPos;
+            currentModel[queenId] = queenPos;
             return;
         }
 
         setTo = (unsigned)-1;
 
         if (queenPos >= board) {
-            z3::expr_vector conflicting(ast.ctx());
+            z3::expr_vector conflicting(ctx());
             conflicting.push_back(ast);
             this->conflict(conflicting);
             return;
@@ -51,10 +51,10 @@ public:
 
         for (const z3::expr &fixed: fixedVariables) {
             unsigned otherId = exprToId[fixed];
-            unsigned otherPos = currentModel[exprToId[fixed]];
+            unsigned otherPos = currentModel[otherId];
 
             if (queenPos == otherPos) {
-                z3::expr_vector conflicting(ast.ctx());
+                z3::expr_vector conflicting(ctx());
                 conflicting.push_back(ast);
                 conflicting.push_back(fixed);
                 this->conflict(conflicting);
@@ -63,7 +63,7 @@ public:
             int diffY = abs((int) queenId - (int) otherId);
             int diffX = abs((int) queenPos - (int) otherPos);
             if (diffX == diffY) {
-                z3::expr_vector conflicting(ast.ctx());
+                z3::expr_vector conflicting(ctx());
                 conflicting.push_back(ast);
                 conflicting.push_back(fixed);
                 this->conflict(conflicting);
@@ -71,7 +71,7 @@ public:
         }
 
         fixedVariables.push_back(ast);
-        currentModel[exprToId[ast]] = queenPos;
+        currentModel[queenId] = queenPos;
     }
 
     bool setLast(z3::expr& val, unsigned& bit, Z3_lbool& is_pos) {

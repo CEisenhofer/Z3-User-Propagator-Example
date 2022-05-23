@@ -16,9 +16,9 @@
 using std::to_string;
 using namespace std::chrono;
 
-#define REPETITIONS 1
+#define REPETITIONS 10
 
-#define MIN_BOARD 4
+#define MIN_BOARD 11
 #define MAX_BOARD1 13
 #define MAX_BOARD2 13
 
@@ -114,6 +114,8 @@ int sorting7(unsigned size, sortingConstraints constraints);
 
 int sorting8(unsigned size, sortingConstraints constraints);
 
+int sorting9(unsigned size, sortingConstraints constraints);
+
 void disjointness();
 
 int nqueensNoPropagatorSAT(unsigned board);
@@ -159,6 +161,10 @@ inline int nqueensPropagator4(unsigned* num) {
 }
 
 inline int nqueensPropagator5(unsigned* num) {
+    return nqueensPropagator(*num, false, true, true, true, false);
+}
+
+inline int nqueensPropagator6(unsigned* num) {
     return nqueensPropagator(*num, false, true, true, true, true);
 }
 

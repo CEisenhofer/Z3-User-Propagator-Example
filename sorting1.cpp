@@ -39,14 +39,14 @@ void applyConstraints(z3::solver& s, const z3::expr_vector& in, const z3::expr_v
     }
     if (constraints & inputReverse) {
         z3::expr_vector counterOrder(s.ctx());
-        for (int i = 0; i < in.size() - 1; i++) {
+        for (unsigned  i = 0; i < in.size() - 1; i++) {
             counterOrder.push_back(z3::uge(in[i], in[i + 1]));
         }
         s.add(z3::mk_and(counterOrder));
     }
     if (constraints & outputReverse) {
         z3::expr_vector counterOrder(s.ctx());
-        for (int i = 0; i < out.size() - 1; i++) {
+        for (unsigned  i = 0; i < out.size() - 1; i++) {
             counterOrder.push_back(z3::ugt(out[i], out[i + 1]));
         }
         s.add(z3::mk_and(counterOrder));

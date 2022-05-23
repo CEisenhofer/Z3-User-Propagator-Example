@@ -183,8 +183,9 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
     else {
         if (!pureSAT)
             propagator = new user_propagator_with_theory(&solver, queens, board, addConflict);
-        else
+        else {
             propagator = new user_propagator_with_theory2(&solver, queens, board, addConflict);
+        }
     }
 
     if (withDecide)
