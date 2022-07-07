@@ -106,7 +106,7 @@ public:
 };
 
 int sorting3(unsigned size, sortingConstraints constraints) {
-    z3::context context;
+    /*z3::context context;
     z3::solver s(context, z3::solver::simple());
 
     z3::sort_vector domain(context);
@@ -141,6 +141,6 @@ int sorting3(unsigned size, sortingConstraints constraints) {
     else {
         z3::model m = s.get_model();
         checkSorting(m, in, out);
-    }
+    }*/
     return -1;
 }

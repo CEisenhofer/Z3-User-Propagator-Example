@@ -5,38 +5,50 @@ int sorting4(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
-    exprNetwork network(context, size);
-    z3::expr_vector inputs(context);
-    z3::expr_vector outputs(context);
+    exprNetwork network(context, 0);
 
-    for (unsigned i = 0; i < size; i++) {
-        inputs.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
-        outputs.push_back(context.bv_const(("out_" + std::to_string(i)).c_str(), BIT_CNT));
-        network.add(i, inputs.back());
-    }
+    struct sort : multiSort {
 
-    // insertion sort: O(n^2)
-    for (unsigned i = 0; i < size - 1; i++) {
-        for (unsigned j = 0; j < size - i - 1; j++) {
-            network.addComparision(j, j + 1);
+    	exprNetwork& n;
+        z3::solver& s;
+
+    	sort(exprNetwork& n, z3::solver& s) : n(n), s(s) { }
+
+        void add(z3::expr_vector& in, z3::expr_vector& out) override {
+            assert(in.size() == out.size());
+            n.increase(in.size());
+            for (unsigned i = 0; i < in.size(); i++) {
+                n.add(i, in[i]);
+            }
+            // insertion sort: O(n^2)
+            for (unsigned i = 0; i < in.size() - 1; i++) {
+                for (unsigned j = 0; j < in.size() - i - 1; j++) {
+                    n.addComparision(j, j + 1);
+                }
+            }
+
+            const auto& outputExpr = n.getCurrentOutputs();
+
+            for (unsigned i = 0; i < outputExpr.size(); i++) {
+                s.add(out[i] == outputExpr[i]);
+            }
         }
-    }
+    };
 
-    const auto &outputExpr = network.getOutputs();
+    sort sort(network, s);
 
-    for (unsigned i = 0; i < outputExpr.size(); i++) {
-        s.add(outputs[i] == outputExpr[i]);
-    }
-
-    applyConstraints(s, inputs, outputExpr, constraints);
-
+    applyConstraints(s, size, sort, constraints);
+    z3::expr_vector a = s.assertions();
     z3::check_result result = s.check();
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }
-    else {
+    else if (!(constraints & pseudoBoolean)) {
         z3::model m = s.get_model();
-        checkSorting(m, inputs, outputs);
+        checkSorting(m, network.getInputs(), network.getOutputs(), constraints);
+    }
+    else {
+        assert(result == z3::sat);
     }
     return -1;
 }

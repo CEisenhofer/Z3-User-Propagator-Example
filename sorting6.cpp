@@ -102,25 +102,34 @@ int sorting6(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
-    z3::expr_vector in(context);
-    z3::expr_vector out(context);
+    SortedPropagator6* propagator = nullptr;
 
-    for (unsigned i = 0; i < size; i++) {
-        in.push_back(context.bv_const((std::string("in") + std::to_string(i)).c_str(), BIT_CNT));
-        out.push_back(context.bv_const((std::string("out") + std::to_string(i)).c_str(), BIT_CNT));
-    }
+    struct sort : multiSort {
 
-    SortedPropagator6 propagator(&s, in, out);
+        z3::solver& s;
+        SortedPropagator6** propagator;
+        sort(z3::solver& s, SortedPropagator6** propagator) : s(s), propagator(propagator) { }
 
-	applyConstraints(s, in, out, constraints);
+        void add(z3::expr_vector& in, z3::expr_vector& out) override {
+            *propagator = new SortedPropagator6(&s, in, out);
+        }
+    };
+
+    sort sort(s, &propagator);
+
+	applyConstraints(s, size, sort, constraints);
 
     z3::check_result result = s.check();
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }
-    else {
+    else if (!(constraints & pseudoBoolean)) {
         z3::model m = s.get_model();
-        checkSorting(m, in, out);
+        checkSorting(m, *sort.in, *sort.out, constraints);
     }
+    else {
+        assert(result == z3::sat);
+    }
+    delete propagator;
     return -1;
 }

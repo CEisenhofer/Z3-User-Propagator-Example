@@ -1,4 +1,4 @@
-#include "common.h"
+#include "LazySortingNetworkPropagator.h"
 
 class SortedPropagator5 : public z3::user_propagator_base {
 
@@ -200,28 +200,41 @@ public:
     }
 };
 
-int sorting5(unsigned size, sortingConstraints constraints) {
+int sorting5(unsigned size, sortingConstraints constraints, bool guess) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
-    z3::expr_vector inputs(context);
+    struct sort : multiSort {
+        LazySortingNetworkPropagator* prop;
+        sort(LazySortingNetworkPropagator* prop) : prop(prop) {}
 
-    for (unsigned i = 0; i < size; i++) {
-        inputs.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
-    }
+        void add(z3::expr_vector& in, z3::expr_vector& out) override {
+            symbolicNetwork network(in.size());
+            // insertion sort: O(n^2)
+            for (unsigned i = 0; i < in.size() - 1; i++) {
+                for (unsigned j = 0; j < in.size() - i - 1; j++) {
+                    network.addComparision(j, j + 1);
+                }
+            }
+            prop->addInputOutput(network, in, out);
+        }
+    };
 
-    SortedPropagator5 propagator(&s, inputs);
+    LazySortingNetworkPropagator propagator(&s, BIT_CNT, guess);
+    sort sort(&propagator);
 
-    applyConstraints(s, inputs, propagator.getOutputs(), constraints);
-
+    applyConstraints(s, size, sort, constraints);
 
     z3::check_result result = s.check();
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }
-    else {
+    else if (!(constraints & pseudoBoolean)) {
         z3::model m = s.get_model();
-        checkSorting(m, inputs, propagator.getOutputs());
+        checkSorting(m, propagator.getInputs(), propagator.getOutputs(), constraints);
+    }
+    else {
+        assert(result == z3::sat);
     }
     return -1;
 }

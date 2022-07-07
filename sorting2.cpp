@@ -146,30 +146,39 @@ int sorting2(unsigned size, sortingConstraints constraints) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
-    z3::expr_vector in(context);
-    z3::expr_vector out(context);
-    z3::expr_vector args(context);
-    z3::sort_vector domain(context);
+    SortedPropagator* propagator = nullptr;
 
-    for (unsigned i = 0; i < size; i++) {
-        domain.push_back(context.bv_sort(BIT_CNT));
-        in.push_back(context.constant((std::string("in") + std::to_string(i)).c_str(), domain[i]));
-        args.push_back(in.back());
-    }
-    for (unsigned i = 0; i < size; i++) {
-        domain.push_back(domain[i]);
-        out.push_back(context.constant((std::string("out") + std::to_string(i)).c_str(), domain[i]));
-        args.push_back(out.back());
-    }
+    struct sort : multiSort {
 
-    z3::func_decl sorted = context.user_propagate_function(context.str_symbol("sorted"), domain, context.bool_sort());
+        SortedPropagator** propagator;
+        z3::solver& s;
 
-    auto func = sorted(args);
-    s.add(func);
+        sort(SortedPropagator** propagator, z3::solver& s) : propagator(propagator), s(s) { }
 
-    applyConstraints(s, in, out, constraints);
+        void add(z3::expr_vector& in, z3::expr_vector& out) override {
+            z3::expr_vector args(in.ctx());
+            z3::sort_vector domain(in.ctx());
 
-    SortedPropagator propagator(&s, func, in, out);
+            for (unsigned i = 0; i < in.size(); i++) {
+                domain.push_back(in.ctx().bv_sort(BIT_CNT));
+                args.push_back(in.back());
+            }
+            for (unsigned i = 0; i < in.size(); i++) {
+                domain.push_back(domain[i]);
+                args.push_back(out.back());
+            }
+
+            z3::func_decl sorted = in.ctx().user_propagate_function(in.ctx().str_symbol("sorted"), domain, in.ctx().bool_sort());
+
+            auto func = sorted(args);
+            s.add(func);
+            *propagator = new SortedPropagator(&s, func, in, out);
+        }
+    };
+
+    sort sort(&propagator, s);
+
+    applyConstraints(s, size, sort, constraints);
 
     z3::check_result result = s.check();
     if (constraints & outputReverse) {
@@ -177,7 +186,8 @@ int sorting2(unsigned size, sortingConstraints constraints) {
     }
     else {
         z3::model m = s.get_model();
-        checkSorting(m, in, out);
+        checkSorting(m, *sort.in, *sort.out, constraints);
     }
+    delete propagator;
     return -1;
 }

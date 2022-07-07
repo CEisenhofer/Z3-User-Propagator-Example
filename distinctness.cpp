@@ -165,15 +165,23 @@ int distinct1(unsigned num, unsigned bits) {
         distinct.push_back(context.bv_const(("x" + to_string(i)).c_str(), bits));
     }
 
-    s.add(z3::distinct(distinct));
+    /*s.add(z3::distinct(distinct));
 
     // without this having only distinct would be simply by checking if |vars| <= 2^bits
     // not all bv are equal; some are more constrained than others
     for (unsigned i = 0; i < (3 * num) / 4; i++) {
         s.add(distinct[i].extract(0, 0) == 0);
-    }
+    }*/
+
+    s.add(z3::distinct(distinct));
+    /*for (unsigned i = 0; i < num; i++) {
+	    for (unsigned j = i + 1; j < num; j++) {
+            s.add(distinct[i] != distinct[j]);
+	    }
+    }*/
 
     z3::check_result result = s.check();
+    printStatistics(s);
     return (int)result;
 }
 
@@ -211,6 +219,7 @@ int distinct2(unsigned num, unsigned bits) {
     }
 
     z3::check_result result = s.check();
+    printStatistics(s);
     return (int)result;
 }
 
@@ -231,8 +240,8 @@ int distinct3(unsigned num, unsigned bits) {
     for (unsigned i = 0; i < (3 * num) / 4; i++) {
         s.add(distinct[i].extract(0, 0) == 0);
     }
-
     z3::check_result result = s.check();
+    printStatistics(s);
     return (int)result;
 }
 
@@ -266,5 +275,6 @@ int distinct4(unsigned num, unsigned bits) {
     }
 
     z3::check_result result = s.check();
+    printStatistics(s);
     return (int)result;
 }

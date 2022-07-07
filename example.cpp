@@ -35,6 +35,17 @@ char getch() {
 #include "user_propagator_internal_maximisation.h"
 #include "user_propagator_created_maximisation.h"
 #include "big_num.h"
+
+#define REPETITIONS 3
+
+#define MIN_BOARD 4
+#define MAX_BOARD1 13
+#define MAX_BOARD2 13
+
+#define SORT_CNT 128
+
+#define DISTINCT_CNT 32
+
 // #include "interval_tree.hpp"
 
 /**
@@ -50,6 +61,22 @@ char getch() {
 typedef int (*benchark_fct)(unsigned[]);
 
 bool isPrintStatistics = false;
+
+void printResultVector(std::vector<double> results) {
+    // For copying to Mathematica
+    std::cout << "{ " << results[0];
+    for (unsigned i = 1; i < results.size(); i++) {
+        std::cout << ", " << results[i];
+    }
+    std::cout << " }" << std::endl;
+}
+
+std::vector<std::vector<double>> benchmarkResults;
+
+void printResults() {
+    for (int i = 0; i < benchmarkResults.size(); i++)
+        printResultVector(benchmarkResults[i]);
+}
 
 void printStatistics(z3::solver& s) {
     if (!isPrintStatistics)
@@ -89,9 +116,11 @@ void printStatistics(z3::solver& s) {
         }
     }
 
-    for (unsigned i = 0; i < values.size(); i++) {
-        std::cout << interestingKeys[i] << ": " << values[i] << std::endl;
+    std::cout << "\n" << interestingKeys[0] << " = " << values[0];
+    for (unsigned i = 1; i < values.size(); i++) {
+        std::cout << ", " << interestingKeys[i] << " = " << values[i];
     }
+    std::cout << std::endl;
 
     std::cout << "{ " << values[0];
 
@@ -116,6 +145,8 @@ void benchmark(unsigned args[], const benchark_fct* testFcts, const char** testN
     for (unsigned i = 0; i < cnt; i++) {
         timeResults.emplace_back();
     }
+
+    benchmarkResults.emplace_back();
 
     for (int rep = 0; rep < REPETITIONS; rep++) {
 #ifdef RANDOM_SHUFFLE
@@ -145,8 +176,6 @@ void benchmark(unsigned args[], const benchark_fct* testFcts, const char** testN
 
     std::cout << "\n" << std::endl;
 
-    std::vector<double> results;
-
     for (unsigned i = 0; i < cnt; i++) {
         std::cout << testNames[i];
         double sum = 0;
@@ -155,17 +184,10 @@ void benchmark(unsigned args[], const benchark_fct* testFcts, const char** testN
             sum += timeResults[i][j];
         }
         std::cout << " | avg: " << sum / REPETITIONS << "ms" << std::endl;
-        results.push_back(sum / REPETITIONS);
+        benchmarkResults.back().push_back(sum / REPETITIONS);
     }
 
     std::cout << std::endl;
-
-    // For copying to Mathematica
-    std::cout << "{ " << results[0];
-    for (unsigned i = 1; i < results.size(); i++) {
-        std::cout << ", " << results[i];
-    }
-    std::cout << " }" << std::endl;
 }
 
 void benchmark(unsigned* arg, const std::initializer_list<benchark_fct> testFcts, const std::initializer_list<const char*> testNames) {
@@ -183,6 +205,7 @@ void benchmark(unsigned* arg, const std::initializer_list<benchark_fct> testFcts
 }
 
 void testNQueens() {
+    benchmarkResults.clear();
     std::cout << "#n-Queens:" << std::endl;
 
     for (unsigned num = MIN_BOARD; num <= MAX_BOARD1; num++) {
@@ -190,26 +213,28 @@ void testNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                //nqueensNoPropagator2,
+                nqueensNoPropagator2,
                 //nqueensNoPropagator3,
-                //nqueensNoPropagator1,
-                //nqueensPropagator2,
+                nqueensNoPropagator1,
+                nqueensPropagator2,
                 nqueensPropagator1,
-                //nqueensPropagator3,
+                nqueensPropagator3,
                 //nqueensPropagator4,
                 nqueensPropagator5,
                 nqueensPropagator6,
+                nqueensPropagator7,
         };
         const char *testNames[] = {
-                //"Eager BV + Blocking clauses",
+                "Eager BV + Blocking clauses",
                 //"Eager BV + Blocking clauses + Useless Propagator",
-                //"Eager Bool + Blocking clauses",
-                //"Eager BV + final conflicts",
+                "Eager Bool + Blocking clauses",
+                "Eager BV + final conflicts",
                 "Eager Bool + final conflicts",
-                //"Lazy BV theory + final conflicts",
+                "Lazy BV theory + final conflicts",
                 //"Lazy BV theory + final conflicts + ordered",
                 "Lazy Bool theory + final conflicts",
                 "Lazy Bool theory + final conflicts + decide",
+                "Hybrid BV theory + final conflicts",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         benchmark(&num, testFcts, testNames, SIZE(testFcts));
@@ -218,6 +243,7 @@ void testNQueens() {
 }
 
 void testSingleNQueens() {
+    benchmarkResults.clear();
     std::cout << "n-Queens:" << std::endl;
 
     for (unsigned num = MIN_BOARD; num <= MAX_BOARD1; num++) {
@@ -225,18 +251,18 @@ void testSingleNQueens() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, true, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, true); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, true, false, false); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, false, false); },
+                //[](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, true); },
         };
         const char* testNames[] = {
                 "Eager BV",
                 "Eager Bool",
                 "Lazy BV",
                 "Lazy Bool",
-                "Lazy Bool + decide",
+                //"Lazy Bool + decide",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         if (num == 50)
@@ -247,6 +273,7 @@ void testSingleNQueens() {
 }
 
 void testNQueensOptimization() {
+    benchmarkResults.clear();
     z3::set_param("smt.ematching", "false");
     z3::set_param("smt.mbqi", "true");
 
@@ -274,6 +301,7 @@ void testNQueensOptimization() {
 }
 
 void testDistinctness() {
+    benchmarkResults.clear();
     std::cout << "Distinctness:" << std::endl;
 
     for (unsigned num = 4; num <= DISTINCT_CNT; num <<= 1) {
@@ -281,7 +309,7 @@ void testDistinctness() {
         std::cout << "num = " << num << ":\n" << std::endl;
 
         unsigned args[2];
-        const benchark_fct testFcts[4] = {
+        const benchark_fct testFcts[] = {
                 [](unsigned args[]) { return distinct1(args[0], args[1]); },
                 [](unsigned args[]) { return distinct2(args[0], args[1]); },
                 [](unsigned args[]) { return distinct3(args[0], args[1]); },
@@ -310,32 +338,113 @@ void testDistinctness() {
     }
 }
 
-void testSorting() {
+int disjointnessPairs(unsigned size) {
+    z3::context context;
+    z3::solver s(context, z3::solver::simple());
 
+    z3::expr_vector in(context);
+
+    for (unsigned i = 0; i < size; i++) {
+        in.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
+    }
+
+	constexpr unsigned bits = BIT_CNT;
+
+    for (unsigned i = 0; i < size; i++) {
+        z3::expr size1 = in[i].extract(bits / 2 - 1, 0);
+        z3::expr addr1 = in[i].extract(bits - 1, bits / 2);
+	    for (unsigned j = i + 1; j < size; j++) {
+            z3::expr size2 = in[j].extract(bits / 2 - 1, 0);
+            z3::expr addr2 = in[j].extract(bits - 1, bits / 2);
+            s.add(z3::ule(z3::zext(addr1, 1) + z3::zext(size1, 1), z3::zext(addr2, 1)) || z3::ule(z3::zext(addr2, 1) + z3::zext(size2, 1), z3::zext(addr1, 1)));
+	    }
+    }
+
+    s.check();
+    z3::model m = s.get_model();
+
+    std::vector<unsigned> v;
+    for (unsigned i = 0; i < in.size(); i++) {
+        v.push_back(m.eval(in[i]).get_numeral_uint());
+    }
+    unsigned mask = (unsigned)-1;
+    mask >>= ((sizeof(unsigned) * 8) - (bits / 2));
+
+    for (unsigned i = 0; i < v.size(); i++) {
+        const unsigned size1 = v[i] & mask;
+        const unsigned addr1 = (v[i] >> (bits / 2)) & mask;
+
+        for (unsigned j = i + 1; j < v.size(); j++) {
+
+            const unsigned size2 = v[j] & mask;
+            const unsigned addr2 = (v[j] >> (bits / 2)) & mask;
+            if (!(addr1 + size1 <= addr2 || addr2 + size2 <= addr1)) {
+                exit(15);
+            }
+        }
+    }
+
+    return -1;
+}
+
+void testDisjointness() {
+    benchmarkResults.clear();
+    std::cout << "Disjointness:" << std::endl;
+
+    for (unsigned num = 2; num <= SORT_CNT; num <<= 1) {
+
+        std::cout << "num = " << num << ":\n" << std::endl;
+
+        const benchark_fct testFcts[] = {
+            [](unsigned num[]) { return sorting4(num[0], intervals); },
+            [](unsigned num[]) { return sorting7(num[0], intervals); },
+            [](unsigned num[]) { return sorting9(num[0]); },
+            [](unsigned num[]) { return disjointnessPairs(num[0]); },
+        };
+        const char* testNames[] = {
+            "Insertion-Sort Network",
+            "Odd-Even Sorting Network",
+            "On-demand Network",
+            "Eager pairs",
+        };
+        static_assert(SIZE(testFcts) == SIZE(testNames));
+        benchmark(&num, testFcts, testNames, SIZE(testFcts));
+    }
+}
+
+void testSorting() {
+    benchmarkResults.clear();
     std::cout << "Sorting:" << std::endl;
 
     for (unsigned num = 2; num <= SORT_CNT; num <<= 1) {
 
         std::cout << "num = " << num << ":\n" << std::endl;
+
+#define CONSTRAINT intervals
+
         const benchark_fct testFcts[] = {
-                //[](unsigned num[]) { return sorting1(num[0], inputDisjoint); },
-                //[](unsigned num[]) { return sorting2(num[0], outputReverse); },
-                //[](unsigned num[]) { return sorting3(num[0], inputDisjoint); },
-                //[](unsigned num[]) { return sorting4(num[0], inputDisjoint); },
-                [](unsigned num[]) { return sorting5(num[0], outputReverse); },
-                //[](unsigned num[]) { return sorting6(num[0], outputReverse); },
-                //[](unsigned num[]) { return sorting7(num[0], inputDisjoint); },
-                [](unsigned num[]) { return sorting8(num[0], outputReverse); },
+                //[](unsigned num[]) { return sorting1(num[0], CONSTRAINT); },
+                //[](unsigned num[]) { return sorting2(num[0], CONSTRAINT); },
+                //[](unsigned num[]) { return sorting3(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting4(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting5(num[0], CONSTRAINT,false); },
+                [](unsigned num[]) { return sorting5(num[0], CONSTRAINT,true); },
+                //[](unsigned num[]) { return sorting6(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting7(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting8(num[0], CONSTRAINT, false); },
+                [](unsigned num[]) { return sorting8(num[0], CONSTRAINT, true); },
         };
         const char *testNames[] = {
                 //"Merge-Sort (BMC)",
                 //"Direct Sort (Predicate)",
                 //"Direct Sort (Function)",
-                //"Insertion-Sort Network",
+                "Insertion-Sort Network",
                 "Lazy Insertion-Sort Network",
+                "Lazy Insertion-Sort Network (Guessed)",
                 //"Permutation",
-                //"Odd-Even Sorting Network",
+                "Odd-Even Sorting Network",
                 "Lazy Odd-Even Sorting Network",
+                "Lazy Odd-Even Sorting Network (Guessed)",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         benchmark(&num, testFcts, testNames, SIZE(testFcts));
@@ -344,12 +453,16 @@ void testSorting() {
 
 struct Test: z3::user_propagator_base {
 
-    Test(z3::solver* s) : user_propagator_base(s) {
+    z3::expr_vector v;
+    int r[15];
+    int assigned = 0;
+
+    Test(z3::solver* s) : user_propagator_base(s), v(ctx()) {
         this->register_fixed();
         this->register_final();
         this->register_decide();
         this->register_eq();
-    	Z3_solver_propagate_diseq(ctx(), *s, diseq_eh);
+        Z3_solver_propagate_diseq(ctx(), *s, diseq_eh);
 
         z3::expr unregistered = ctx().bool_const("unregistered");
         z3::expr a = ctx().bool_const("a");
@@ -363,11 +476,30 @@ struct Test: z3::user_propagator_base {
         z3::expr y = ctx().int_const("y");
         z3::expr z = ctx().int_const("z");
 
+        srand((unsigned)time(nullptr));
+
+        for (int i = 0; i < 15; i++) {
+            r[i] = i;
+        }
+
+        for (int i = 0; i < 15; i++) {
+            const int swp = rand() % 15;
+            const int tmp = r[i];
+            r[i] = r[swp];
+            r[swp] = tmp;
+        }
+        for (int i = 0; i < 15; i++) {
+            v.push_back(ctx().bool_const(("v" + std::to_string(i)).c_str()));
+            this->add(v.back());
+            std::cout << "v" << r[i] << std::endl;
+        }
+        s->add(z3::mk_or(v));
+
         //z3::sort_vector domain(ctx());
         //domain.push_back(ctx().int_sort());
         //z3::func_decl f = ctx().function(ctx().str_symbol("f"), domain, domain.back());
         //s->add(((a || b) || c || unregistered || x + y == 2) && d == e && f == g && y != x && z >= x && z <= x);
-        s->add(x >= 2);
+        /*s->add(x >= 2);
         s->add(a || b);
         s->add(g || h);
         this->add(a);
@@ -375,10 +507,10 @@ struct Test: z3::user_propagator_base {
         std::cout << (a || b).simplify().to_string() << std::endl;
         std::cout << (g || h).simplify().to_string() << std::endl;
         this->add(g);
-        this->add(h);
+        this->add(h);*/
         //s->add((z >= x && z <= x) || (y >= z && y <= z) || (x >= z && x <= z) && f(x) > 0 && f(y) > 0 && f(z) > 0 && f(z) != z);
         //this->add(f(x));
-    	//this->add(f(y));
+        //this->add(f(y));
         //this->add(f(z));
 
         //s->add(a || b);
@@ -403,13 +535,13 @@ struct Test: z3::user_propagator_base {
         }*/
     }
 
-	void final() override {
+    void final() override {
         //z3::expr_vector empty(ctx());
         //this->propagate(empty, !ctx().bool_const("g"));
         //this->propagate(empty, !ctx().bool_const("h"));
     }
 
-	void push() override {
+    void push() override {
         std::cout << "Push" << std::endl;
     }
 
@@ -425,11 +557,14 @@ struct Test: z3::user_propagator_base {
         std::cout << "Decide: " + val.to_string() + 
             " bit: " + std::to_string(bit) + 
             " = " + (is_pos == Z3_L_FALSE ? "false" : "true") << std::endl;
-        is_pos = Z3_L_TRUE;
+        is_pos = (rand() & 1) == 1 ? Z3_L_TRUE : Z3_L_FALSE;
         bit = 0;
+        if (assigned < 14) {
+            this->next_split(v[r[++assigned]], 0, (rand() & 1) == 1 ? Z3_L_TRUE : Z3_L_FALSE);
+        }
     }
 
-	void eq(z3::expr const& lhs, z3::expr const& rhs) override {
+    void eq(z3::expr const& lhs, z3::expr const& rhs) override {
         std::cout << "Eq " + lhs.to_string() + " = " + rhs.to_string() << std::endl;
     }
 
@@ -439,32 +574,46 @@ struct Test: z3::user_propagator_base {
         std::cout << "Diseq " + x.to_string() + " != " + y.to_string() << std::endl;
     }
 
-	user_propagator_base* fresh(z3::context& ctx) override { return this; }
+    user_propagator_base* fresh(z3::context& ctx) override {
+        return this;
+    }
 
 };
 
 const std::initializer_list<benchark_fct> optSortingFcts = {
-    //[](unsigned a[]) { return opt_sorting(a, Params(false, false, false, false, false, false, false, false, false)); },
-    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, false, false , false, false, true, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, false, true , false, false, false, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, false, true , false, true , false, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, false, true , true , true , false, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, false, true , true , true , true, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true, true, false, false, true, true, true , false, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true , true , true , false, true , true , true , false, false)); },
-    //[](unsigned a[]) { return opt_sorting(a, Params(true, true, false, true, true, true, true, false, false)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(false, false, false, false, false, false, false, false, false, None)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, MinimalModel)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, CompleteModel)); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(MinimalModel | Repropagate))); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(CompleteModel | Repropagate))); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(NearlyCompleteModel | Repropagate))); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(MinimalModel | CompleteModel | Repropagate))); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(CompleteModel | Restart | Repropagate))); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(Randomized))); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, None)); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , true , false, true , false, false, false, None)); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , true , true , true , false, false, false, None)); },
+    [](unsigned a[]) { return opt_sorting(a, Params(true , true , true , true , false, false, false, CompleteModel)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , true , false, false, false, false, None)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , true , true , false, false, false, None)); },
 };
 
 const std::initializer_list<const char*> optSortingNames = {
     //"Nothing",
-    "Simulated Quantifier",
-    //"Adjacent",
+    //"Adjacent + Simulated Quantifier + Minimal Model",
+    //"Adjacent + Simulated Quantifier + Complete Model",
+    "Adjacent + Simulated Quantifier + Minimal Model (Rep)",
+    "Adjacent + Simulated Quantifier + Complete Model (Rep)",
+    //"Adjacent + Simulated Quantifier + Nearly Complete Model",
+    //"Adjacent + Simulated Quantifier + Complete/Minimal Model",
+    //"Adjacent + Simulated Quantifier + Complete Model + Restart",
+    "Adjacent + Randomized",
+    "Adjacent",
+    "Adjacent + Decide",
+    "Adjacent + Decide + Occurrence",
+    "Adjacent + Decide + Occurrence + Complete Model",
     //"Adjacent + Connected",
     //"Adjacent + Connected (All)",
-    //"Adjacent + Connected (All) + Simulated Quantifier",
-    //"Adjacent + Connected (All) + Decide",
-    //"Adjacent + Connected (All) + Decide + Random",
-    //"Adjacent + Connected (All) + Decide + Occurrences",
 };
 
 void findOptimalUnsat() {
@@ -479,7 +628,8 @@ void findOptimalUnsat() {
 void findOptimalSat() {
     unsigned solutions[] = {0, 0, 1, 3, 5, 9, 12, 16, 19, 25, 29, 35, 39 };
     unsigned _args[] = { 0, 0, (unsigned)false };
-    for (unsigned i = 2; i < SIZE(solutions); i++) {
+    for (unsigned i = 3; i < SIZE(solutions); i++) {
+        std::cout << "Size " << i << ":" << std::endl;
         _args[0] = i;
         _args[1] = solutions[i];
         benchmark(
@@ -492,10 +642,13 @@ void findOptimalSat() {
 
 void findAllOptimalSolutions(unsigned sz) {
     unsigned args[] = { sz, 1, (unsigned)false };
-    opt_sorting(args, Params(true, true, false, true, true, true, true, true, true));
+    opt_sorting(args, Params(true, true, true, true, true, true, true, None));
 }
 
 int main() {
+
+    z3::set_param("smt.mbqi.max_iterations", 100000000);
+    z3::set_param("smt.relevancy", 0);
 
 #ifdef WINDOWS
     CONSOLE_SCREEN_BUFFER_INFO csbi = {};
@@ -504,15 +657,108 @@ int main() {
     csbi.dwSize.Y = SHRT_MAX - 1;
     SetConsoleScreenBufferSize(con, csbi.dwSize);
 #endif
+    /*
+    z3::set_param("rewriter.blast_eq_value", true);
+    z3::set_param("smt.phase_selection", 5); // random
 
+    const benchark_fct testFcts[] = {
+            [](unsigned args[]) { return distinct1(1000, 32); },
+            [](unsigned args[]) { return distinct3(1000, 32); },
+    };
+    const char* testNames[] = {
+            "Distinct-O(n^2)",
+            "Distinct-Propagator",
+    };
+    
+    static_assert(SIZE(testFcts) == SIZE(testNames));
 
+    isPrintStatistics = true;
+    benchmark(nullptr, testFcts, testNames, 2);
+    //testDistinctness();
+    getch();
+
+    testNQueens();
+    getch();*/
+
+    z3::set_param("rewriter.blast_eq_value", true);
+    z3::set_param("smt.phase_selection", 5); // random
+
+    testNQueens();
+
+    //findOptimalSat();
+    /*unsigned solutions[] = { 0, 0, 1, 3, 5, 9, 12, 16, 19, 25, 29, 35, 39 };
+    unsigned __args[] = { 0, 0, (unsigned)true };
+    __args[0] = 5;
+    __args[1] = 6;
+    benchmark(
+        __args,
+        optSortingFcts,
+        optSortingNames
+    );
+    __args[1] = 7;
+    benchmark(
+        __args,
+        optSortingFcts,
+        optSortingNames
+    );
+    std::cout << "Done" << std::endl;
+    getch();*/
+
+    getch();
+    testDisjointness();
+    //testSorting();
+    getch();
+
+    unsigned _args[] = { 6, 1, (unsigned)false };
+
+    // sorting2(_args);
+    // sorting3(_args);
+    // sorting4(_args);
+    // sorting5(_args);
+    // sorting6(_args);
+    /*std::cout << "Optimal sorting network of size " << _args[0] << ": \n" << 
+        opt_sorting(_args, Params(true, false, false, false, true, true, true, false, true))
+    << std::endl;*/
+    findOptimalSat();
+    std::cout << "Done" << std::endl;
+    getch();
+    //testDistinctness();
+    //testNQueens();
+    //testSingleNQueens();
+    //std::cout << "Results:\n\n";
+    //printResults();
+
+    getch();
 
     z3::context _ctx;
-	z3::solver _s(_ctx, z3::solver::simple());
-    
-    //Test t(&_s);
-    //_s.check();
-    //std::cout << _s.get_model() << std::endl;
+    z3::solver _s(_ctx, z3::solver::simple());
+    Test t(&_s);
+    _s.check();
+    std::cout << _s.get_model() << std::endl;
+
+    /*z3::sort_vector vec(_ctx);
+    vec.push_back(_ctx.bv_sort(3));
+    z3::func_decl f = _ctx.function("f", vec, vec.back());
+    z3::expr x = _ctx.constant("x", vec.back());
+    z3::expr y = _ctx.constant("y", vec.back());
+    _s.add(f(x) != f(y));
+    _s.add(x + y == 0);*/
+    /*_s.add(_ctx.int_const("x") == -_ctx.int_const("y"));
+    _s.add(_ctx.int_const("y") == -_ctx.int_const("z"));
+    _s.add(_ctx.int_const("x") != _ctx.int_const("z"));*/
+    z3::expr x = _ctx.bv_const("x", 3);
+    z3::expr y = _ctx.bv_const("y", 3);
+    //z3::expr z = _ctx.bool_const("z");
+    //z3::expr z = _ctx.bv_const("z", 3);
+    //_s.add(x == 0 || z3::forall(y, x * y == y));
+    //_s.add(x > 0);
+    //_s.add(z && z == z3::forall(y, x * y == y));
+    //_s.add(z3::exists(x, z3::forall(y, z3::exists(z, x * y == z))));
+    _s.add(x == y);
+    std::cout << "Asserted: " << _s.assertions().to_string() << std::endl;
+    _s.check();
+    std::cout << "Asserted: " << _s.assertions().to_string() << std::endl;
+    std::cout << _s.get_model().to_string() << std::endl;
 
     // z3::set_param("smt.bv.eq_axioms", false);
 
@@ -527,27 +773,11 @@ int main() {
     //testNQueens();
     getch();
 
-    z3::set_param("smt.mbqi.max_iterations", 100000000);
-
     //findAllOptimalSolutions(5);
     //findOptimalSat();
     findOptimalUnsat();
     //getch();
 
-    unsigned _args[] = { 5, 1, (unsigned)false };
-
-    // sorting2(_args);
-    // sorting3(_args);
-    // sorting4(_args);
-    // sorting5(_args);
-    // sorting6(_args);
-    // opt_sorting(_args, Params(true, true, false, true, true, true, true, false, false));
-    getch();
-    //std::cout << opt_sorting(_args, Params(true, true, false, false, true, true)) << std::endl;
-    getch();
-
-    std::cout << "Optimal sorting network of size " << _args[0] << ": \n" << opt_sorting(_args) << std::endl;
-    
     exit(19);
     //sorting7(_args);
     testSorting();

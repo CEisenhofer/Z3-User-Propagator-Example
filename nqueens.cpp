@@ -125,6 +125,10 @@ int enumerateSolutions(z3::context& context, z3::solver& solver, const z3::expr_
         for (unsigned i = 0; i < queens.size(); i++) {
             z3::expr eval = model.eval(queens[i]);
             WriteLine(("q" + to_string(i) + " = " + to_string(eval.get_numeral_int())));
+            /*for (int j = 0; j < queens[i].get_sort().bv_size(); j++) {
+                bool b = (eval.get_numeral_int() >> j) & 1;
+                blocking.push_back(b ? !queens[i].bit2bool(j) : queens[i].bit2bool(j));
+            }*/
             blocking.push_back(queens[i] != eval);
         }
 
@@ -159,7 +163,7 @@ int nqueensNoPropagatorBV(unsigned board) {
     return enumerateSolutions(context, solver, queens);
 }
 
-int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, bool pureSAT, bool withTheory, bool withDecide) {
+int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, bool pureSAT, bool withTheory, bool withDecide, bool hybrid) {
 
     if (singleSolution)
         addConflict = false;
@@ -198,6 +202,10 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
         else {
             solver.add(createConstraintsBool(context, queens, board));
         }
+    }
+
+    if (withTheory && !pureSAT && hybrid) {
+        solver.add(z3::distinct(queens));
     }
 
     int res;
