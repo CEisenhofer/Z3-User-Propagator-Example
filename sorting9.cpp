@@ -178,6 +178,7 @@ int sorting9(unsigned size) {
 
     s.check();
     z3::model m = s.get_model();
+    printStatistics(s);
 
     std::vector<unsigned> v;
     for (unsigned i = 0; i< in.size(); i++ ) {

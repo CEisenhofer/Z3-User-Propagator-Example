@@ -105,13 +105,13 @@ static z3::expr createConstraintsBool(z3::context& context, const z3::expr_vecto
     return z3::mk_and(assertions);
 }
 
-int enumerateSolutions(z3::context& context, z3::solver& solver, const z3::expr_vector& queens) {
+int enumerateSolutions(z3::context& context, z3::solver& solver, const z3::expr_vector& queens, int sol) {
     int solutionId = 0;
     
     while (true) {
         z3::check_result res = solver.check();
 
-        if (res != z3::check_result::sat) {
+        if (res != z3::check_result::sat || sol == solutionId) {
             break;
         }
 
@@ -141,7 +141,7 @@ int enumerateSolutions(z3::context& context, z3::solver& solver, const z3::expr_
     return solutionId;
 }
 
-int nqueensNoPropagatorSAT(unsigned board) {
+int nqueensNoPropagatorSAT(unsigned board, int sol) {
     z3::context context;
     z3::solver solver(context, z3::solver::simple());
 
@@ -149,10 +149,10 @@ int nqueensNoPropagatorSAT(unsigned board) {
 
     solver.add(createConstraintsBool(context, queens, board));
 
-    return enumerateSolutions(context, solver, queens);
+    return enumerateSolutions(context, solver, queens, sol);
 }
 
-int nqueensNoPropagatorBV(unsigned board) {
+int nqueensNoPropagatorBV(unsigned board, int sol) {
     z3::context context;
     z3::solver solver(context, Z3_mk_simple_solver(context));
 
@@ -160,10 +160,10 @@ int nqueensNoPropagatorBV(unsigned board) {
 
     solver.add(createConstraintsBV(context, queens));
 
-    return enumerateSolutions(context, solver, queens);
+    return enumerateSolutions(context, solver, queens, sol);
 }
 
-int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, bool pureSAT, bool withTheory, bool withDecide, bool hybrid) {
+int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, bool pureSAT, bool withTheory, int withDecide, bool hybrid, int sol) {
 
     if (singleSolution)
         addConflict = false;
@@ -181,19 +181,18 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
 
     user_propagator* propagator;
 
-    if (!withTheory) {
-    	propagator = new user_propagator(&solver, queens, board, addConflict);
+    if (!withTheory && !withDecide) {
+    	propagator = new user_propagator(&solver, queens, board, addConflict, sol);
     }
     else {
         if (!pureSAT)
-            propagator = new user_propagator_with_theory(&solver, queens, board, addConflict);
-        else {
-            propagator = new user_propagator_with_theory2(&solver, queens, board, addConflict);
-        }
-    }
+            propagator = new user_propagator_with_theory(&solver, queens, board, addConflict, sol);
+        else
+            propagator = new user_propagator_with_theory2(&solver, queens, board, addConflict, withTheory, withDecide, sol);
 
-    if (withDecide)
-        propagator->register_decide();
+        if (withDecide)
+            propagator->register_decide();
+    }
 
     if (!withTheory) {
         if (!pureSAT) {
@@ -211,7 +210,7 @@ int nqueensPropagator(unsigned board, bool singleSolution, bool addConflict, boo
     int res;
 
     if (!addConflict && !singleSolution) {
-        res = enumerateSolutions(context, solver, queens);
+        res = enumerateSolutions(context, solver, queens, sol);
     }
     else {
         solver.check();

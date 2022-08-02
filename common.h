@@ -134,23 +134,34 @@ int sorting3(unsigned size, sortingConstraints constraints);
 
 int sorting4(unsigned size, sortingConstraints constraints);
 
-int sorting5(unsigned size, sortingConstraints constraints, bool guess);
+int sorting5(unsigned size, sortingConstraints constraints, bool persistent);
 
 int sorting6(unsigned size, sortingConstraints constraints);
 
 int sorting7(unsigned size, sortingConstraints constraints);
 
-int sorting8(unsigned size, sortingConstraints constraints, bool guess);
+int sorting8(unsigned size, sortingConstraints constraints, bool persistent);
 
 int sorting9(unsigned size);
 
+int sorting10(unsigned size, sortingConstraints constraints);
+
+int sorting11(unsigned size, sortingConstraints constraints);
+
+int sorting12(unsigned size, sortingConstraints constraints);
+
+int sorting13(unsigned size, sortingConstraints constraints);
+
+int sorting14(unsigned size, sortingConstraints constraints);
+
 void disjointness();
 
-int nqueensNoPropagatorSAT(unsigned board);
+int nqueensNoPropagatorSAT(unsigned board, int sol);
 
-int nqueensNoPropagatorBV(unsigned board);
+int nqueensNoPropagatorBV(unsigned board, int sol);
 
-int nqueensPropagator(unsigned board, bool singleSolution, bool addConflicts, bool pureSAT, bool withTheory, bool withDecide, bool hybrid);
+// withDecide (0 ... off; 1 ... tend again solution; 2 ... tend to solution)
+int nqueensPropagator(unsigned board, bool singleSolution, bool addConflicts, bool pureSAT, bool withTheory, int withDecide, bool hybrid, int sol);
 
 int nqueensMaximization1(unsigned *num);
 
@@ -161,43 +172,47 @@ int nqueensMaximization3(unsigned *num);
 int nqueensMaximization4(unsigned *num);
 
 inline int nqueensNoPropagator1(unsigned *num) {
-    return nqueensNoPropagatorSAT(*num);
+    return nqueensNoPropagatorSAT(num[0], num[1]);
 }
 
 inline int nqueensNoPropagator2(unsigned *num) {
-    return nqueensNoPropagatorBV(*num);
+    return nqueensNoPropagatorBV(num[0], num[1]);
 }
 
 inline int nqueensNoPropagator3(unsigned* num) {
-    return nqueensPropagator(*num, false, false, false, false, true, false);
+    return nqueensPropagator(num[0], false, false, false, false, false, false, num[1]);
 }
 
 inline int nqueensPropagator1(unsigned* num) {
-    return nqueensPropagator(*num, false, true, true, false, false, false);
+    return nqueensPropagator(num[0], false, true, true, false, false, false, num[1]);
 }
 
 inline int nqueensPropagator2(unsigned *num) {
-    return nqueensPropagator(*num, false, true, false, false, false, false);
+    return nqueensPropagator(num[0], false, true, false, false, false, false, num[1]);
 }
 
 inline int nqueensPropagator3(unsigned *num) {
-    return nqueensPropagator(*num, false, true, false, true, false, false);
+    return nqueensPropagator(num[0], false, true, false, true, false, false, num[1]);
 }
 
 inline int nqueensPropagator4(unsigned* num) {
-    return nqueensPropagator(*num, false, true, false, true, true, false);
+    return nqueensPropagator(num[0], false, true, false, true, true, false, num[1]);
 }
 
 inline int nqueensPropagator5(unsigned* num) {
-    return nqueensPropagator(*num, false, true, true, true, false, false);
+    return nqueensPropagator(num[0], false, true, true, true, false, false, num[1]);
 }
 
 inline int nqueensPropagator6(unsigned* num) {
-    return nqueensPropagator(*num, false, true, true, true, true, false);
+    return nqueensPropagator(num[0], false, true, true, true, true, false, num[1]);
 }
 
 inline int nqueensPropagator7(unsigned* num) {
-    return nqueensPropagator(*num, false, true, false, true, true, true);
+    return nqueensPropagator(num[0], false, true, false, true, true, true, num[1]);
+}
+
+inline int nqueensPropagator8(unsigned* num) {
+    return nqueensPropagator(num[0], false, true, true, false, true, false, num[1]);
 }
 
 int nqueensHigherDimensionAllCover(unsigned args[2]);

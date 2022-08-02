@@ -743,8 +743,8 @@ public:
             layers.clear();
         }
 
-        if (propagated && (params.strategy & Restart))
-            this->restart();
+        /*if (propagated && (params.strategy & Restart))
+            this->restart();*/
     }
 
     static std::vector<unsigned> randomTest(unsigned lines, const std::vector<unsigned>& connections) {

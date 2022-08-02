@@ -7,10 +7,12 @@ class user_propagator_with_theory : public user_propagator {
     std::unordered_map<unsigned, z3::expr> idToExpr;
     unsigned bitCnt;
 
+    z3::expr_vector conflicting;
+
 public:
 
     user_propagator_with_theory(z3::context &c, const z3::expr_vector& queens, unsigned board, bool allSat)
-            : user_propagator(c, queens, board, allSat) {
+            : user_propagator(c, queens, board, allSat), conflicting(ctx()) {
 
     	for (unsigned i = 0; i < queens.size(); i++) {
             idToExpr.emplace(i, queens[i]);
@@ -18,8 +20,8 @@ public:
         bitCnt = queens[0].get_sort().bv_size();
     }
 
-    user_propagator_with_theory(z3::solver *s, const z3::expr_vector& queens, unsigned board, bool allSat)
-            : user_propagator(s, queens, board, allSat) {
+    user_propagator_with_theory(z3::solver *s, const z3::expr_vector& queens, unsigned board, bool allSat, int sol)
+            : user_propagator(s, queens, board, allSat, sol), conflicting(ctx()) {
 
         for (unsigned i = 0; i < queens.size(); i++) {
             idToExpr.emplace(i, queens[i]);
@@ -43,7 +45,7 @@ public:
         setTo = (unsigned)-1;
 
         if (queenPos >= board) {
-            z3::expr_vector conflicting(ctx());
+            conflicting.resize(0);
             conflicting.push_back(ast);
             this->conflict(conflicting);
             return;
@@ -54,7 +56,7 @@ public:
             unsigned otherPos = currentModel[otherId];
 
             if (queenPos == otherPos) {
-                z3::expr_vector conflicting(ctx());
+                conflicting.resize(0);
                 conflicting.push_back(ast);
                 conflicting.push_back(fixed);
                 this->conflict(conflicting);
@@ -63,7 +65,7 @@ public:
             int diffY = abs((int) queenId - (int) otherId);
             int diffX = abs((int) queenPos - (int) otherPos);
             if (diffX == diffY) {
-                z3::expr_vector conflicting(ctx());
+                conflicting.resize(0);
                 conflicting.push_back(ast);
                 conflicting.push_back(fixed);
                 this->conflict(conflicting);

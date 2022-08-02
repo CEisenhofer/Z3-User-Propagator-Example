@@ -168,10 +168,13 @@ int sorting1(unsigned size, sortingConstraints constraints) {
     struct sort : multiSort {
 
         z3::solver& s;
+        z3::expr_vector in, out;
 
-        sort(z3::solver& s) : s(s) { }
+        sort(z3::solver& s) : s(s), in(s.ctx()), out(s.ctx()) { }
 
         void add(z3::expr_vector& in, z3::expr_vector& out) override {
+            this->in = in;
+            this->out = out;
             std::vector<std::vector<z3::func_decl>> subResults;
             // First level: "recursion level"
             // Second level: variable ordering that are already sorted locally
@@ -236,12 +239,16 @@ int sorting1(unsigned size, sortingConstraints constraints) {
     applyConstraints(s, size, sort, constraints);
 
     z3::check_result result = s.check();
+    printStatistics(s);
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }
-    else {
+    else if (!(constraints & pseudoBoolean)) {
         z3::model m = s.get_model();
-        checkSorting(m, *sort.in, *sort.out, constraints);
+        checkSorting(m, sort.in, sort.out, constraints);
+    }
+    else {
+        assert(result == z3::sat);
     }
     return -1;
 }

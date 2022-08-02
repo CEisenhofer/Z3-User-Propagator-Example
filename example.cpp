@@ -36,11 +36,15 @@ char getch() {
 #include "user_propagator_created_maximisation.h"
 #include "big_num.h"
 
-#define REPETITIONS 3
+#define REPETITIONS 1
 
-#define MIN_BOARD 4
-#define MAX_BOARD1 13
-#define MAX_BOARD2 13
+#define MIN_BOARD 14
+#define MAX_BOARD1 15
+#define MAX_BOARD2 14
+
+#define MIN_BOARD_SINGLE 5
+#define MAX_BOARD_SINGLE 60
+#define BOARD_SINGLE_INC 5
 
 #define SORT_CNT 128
 
@@ -204,40 +208,49 @@ void benchmark(unsigned* arg, const std::initializer_list<benchark_fct> testFcts
     return benchmark(arg, fcts.data(), names.data(), (unsigned)testNames.size());
 }
 
-void testNQueens() {
+void testNQueens(double perc = 1.0) {
     benchmarkResults.clear();
     std::cout << "#n-Queens:" << std::endl;
+    constexpr int solutions[] =
+        { 0, 0, 0, 0, 2, 10, 4, 40, 92, 352, 724, 2680, 14200, 73712, 365596, 2279184 };
 
     for (unsigned num = MIN_BOARD; num <= MAX_BOARD1; num++) {
 
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                nqueensNoPropagator2,
+                //nqueensNoPropagator2,
                 //nqueensNoPropagator3,
-                nqueensNoPropagator1,
-                nqueensPropagator2,
+                //nqueensNoPropagator1,
+                //nqueensPropagator2,
                 nqueensPropagator1,
-                nqueensPropagator3,
+                nqueensPropagator8,
+                //nqueensPropagator3,
                 //nqueensPropagator4,
                 nqueensPropagator5,
-                nqueensPropagator6,
-                nqueensPropagator7,
+                //nqueensPropagator6,
+                //nqueensPropagator7,
         };
         const char *testNames[] = {
-                "Eager BV + Blocking clauses",
+                //"Eager BV + Blocking clauses",
                 //"Eager BV + Blocking clauses + Useless Propagator",
-                "Eager Bool + Blocking clauses",
-                "Eager BV + final conflicts",
+                //"Eager Bool + Blocking clauses",
+                //"Eager BV + final conflicts",
                 "Eager Bool + final conflicts",
-                "Lazy BV theory + final conflicts",
+                "Eager Bool + final conflicts + decide",
+                //"Lazy BV theory + final conflicts",
                 //"Lazy BV theory + final conflicts + ordered",
                 "Lazy Bool theory + final conflicts",
-                "Lazy Bool theory + final conflicts + decide",
-                "Hybrid BV theory + final conflicts",
+                //"Lazy Bool theory + final conflicts + decide",
+                //"Hybrid BV theory + final conflicts",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
-        benchmark(&num, testFcts, testNames, SIZE(testFcts));
+
+        unsigned args[2];
+        args[0] = num;
+        args[1] = (unsigned)ceil(perc * solutions[num]);
+
+        benchmark(args, testFcts, testNames, SIZE(testFcts));
         isPrintStatistics = false;
     }
 }
@@ -245,28 +258,37 @@ void testNQueens() {
 void testSingleNQueens() {
     benchmarkResults.clear();
     std::cout << "n-Queens:" << std::endl;
-
-    for (unsigned num = MIN_BOARD; num <= MAX_BOARD1; num++) {
+    
+    for (unsigned num = MIN_BOARD_SINGLE; num <= MAX_BOARD_SINGLE; num += BOARD_SINGLE_INC) {
 
         std::cout << "num = " << num << ":\n" << std::endl;
 
         const benchark_fct testFcts[] = {
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false, false, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, true, false, false); },
-                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, false, false); },
-                //[](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, true); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, false, false, false, -1); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, false, false, -1); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, 1, false, -1); },
+                //[](unsigned* num) { return nqueensPropagator(*num, true, false, true, false, 2, false, -1); },
+
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, false, true, false, false, -1); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, false, false, -1); },
+                [](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, 1, false, -1); },
+                //[](unsigned* num) { return nqueensPropagator(*num, true, false, true, true, 2, false, -1); },
         };
         const char* testNames[] = {
                 "Eager BV",
                 "Eager Bool",
+                "Eager Bool + decide",
+                //"Eager Bool + decide (neg)",
+
                 "Lazy BV",
                 "Lazy Bool",
-                //"Lazy Bool + decide",
+                "Lazy Bool + decide",
+                //"Lazy Bool + decide (neg)",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
-        if (num == 50)
+        if (num == MAX_BOARD_SINGLE)
             isPrintStatistics = true;
+
         benchmark(&num, testFcts, testNames, SIZE(testFcts));
         isPrintStatistics = false;
     }
@@ -348,16 +370,16 @@ int disjointnessPairs(unsigned size) {
         in.push_back(context.bv_const(("in_" + std::to_string(i)).c_str(), BIT_CNT));
     }
 
-	constexpr unsigned bits = BIT_CNT;
+    constexpr unsigned bits = BIT_CNT;
 
     for (unsigned i = 0; i < size; i++) {
         z3::expr size1 = in[i].extract(bits / 2 - 1, 0);
         z3::expr addr1 = in[i].extract(bits - 1, bits / 2);
-	    for (unsigned j = i + 1; j < size; j++) {
+        for (unsigned j = i + 1; j < size; j++) {
             z3::expr size2 = in[j].extract(bits / 2 - 1, 0);
             z3::expr addr2 = in[j].extract(bits - 1, bits / 2);
             s.add(z3::ule(z3::zext(addr1, 1) + z3::zext(size1, 1), z3::zext(addr2, 1)) || z3::ule(z3::zext(addr2, 1) + z3::zext(size2, 1), z3::zext(addr1, 1)));
-	    }
+        }
     }
 
     s.check();
@@ -420,31 +442,41 @@ void testSorting() {
 
         std::cout << "num = " << num << ":\n" << std::endl;
 
-#define CONSTRAINT intervals
+#define CONSTRAINT (sortingConstraints)(intervals)
 
         const benchark_fct testFcts[] = {
                 //[](unsigned num[]) { return sorting1(num[0], CONSTRAINT); },
                 //[](unsigned num[]) { return sorting2(num[0], CONSTRAINT); },
                 //[](unsigned num[]) { return sorting3(num[0], CONSTRAINT); },
-                [](unsigned num[]) { return sorting4(num[0], CONSTRAINT); },
-                [](unsigned num[]) { return sorting5(num[0], CONSTRAINT,false); },
-                [](unsigned num[]) { return sorting5(num[0], CONSTRAINT,true); },
-                //[](unsigned num[]) { return sorting6(num[0], CONSTRAINT); },
+                //[](unsigned num[]) { return sorting4(num[0], CONSTRAINT); },
+                //[](unsigned num[]) { return sorting5(num[0], CONSTRAINT,false); },
+                //[](unsigned num[]) { return sorting5(num[0], CONSTRAINT,true); },
+                [](unsigned num[]) { return sorting6(num[0], CONSTRAINT); },
                 [](unsigned num[]) { return sorting7(num[0], CONSTRAINT); },
-                [](unsigned num[]) { return sorting8(num[0], CONSTRAINT, false); },
+                //[](unsigned num[]) { return sorting8(num[0], CONSTRAINT, false); },
                 [](unsigned num[]) { return sorting8(num[0], CONSTRAINT, true); },
+                //[](unsigned num[]) { return sorting10(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting11(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting12(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting13(num[0], CONSTRAINT); },
+                [](unsigned num[]) { return sorting14(num[0], CONSTRAINT); },
         };
         const char *testNames[] = {
                 //"Merge-Sort (BMC)",
                 //"Direct Sort (Predicate)",
                 //"Direct Sort (Function)",
-                "Insertion-Sort Network",
-                "Lazy Insertion-Sort Network",
-                "Lazy Insertion-Sort Network (Guessed)",
-                //"Permutation",
+                //"Insertion-Sort Network",
+                //"Lazy Insertion-Sort Network",
+                //"Lazy Insertion-Sort Network (Persistent)",
+                "Permutation",
                 "Odd-Even Sorting Network",
-                "Lazy Odd-Even Sorting Network",
-                "Lazy Odd-Even Sorting Network (Guessed)",
+                //"Lazy Odd-Even Sorting Network",
+                "Lazy Odd-Even Sorting Network (Persistent)",
+                //"Matching",
+                "Bijection",
+                "Lazy Bijection",
+                "Bijection Numeric",
+                "Lazy Bijection Numeric",
         };
         static_assert(SIZE(testFcts) == SIZE(testNames));
         benchmark(&num, testFcts, testNames, SIZE(testFcts));
@@ -602,15 +634,15 @@ const std::initializer_list<const char*> optSortingNames = {
     //"Nothing",
     //"Adjacent + Simulated Quantifier + Minimal Model",
     //"Adjacent + Simulated Quantifier + Complete Model",
-    "Adjacent + Simulated Quantifier + Minimal Model (Rep)",
-    "Adjacent + Simulated Quantifier + Complete Model (Rep)",
+    // "Adjacent + Simulated Quantifier + Minimal Model (Rep)",
+    // "Adjacent + Simulated Quantifier + Complete Model (Rep)",
     //"Adjacent + Simulated Quantifier + Nearly Complete Model",
     //"Adjacent + Simulated Quantifier + Complete/Minimal Model",
     //"Adjacent + Simulated Quantifier + Complete Model + Restart",
-    "Adjacent + Randomized",
-    "Adjacent",
-    "Adjacent + Decide",
-    "Adjacent + Decide + Occurrence",
+    // "Adjacent + Randomized",
+    // "Adjacent",
+    // "Adjacent + Decide",
+    // "Adjacent + Decide + Occurrence",
     "Adjacent + Decide + Occurrence + Complete Model",
     //"Adjacent + Connected",
     //"Adjacent + Connected (All)",
@@ -625,10 +657,10 @@ void findOptimalUnsat() {
     );
 }
 
-void findOptimalSat() {
+void findOptimalSat(int start = 0) {
     unsigned solutions[] = {0, 0, 1, 3, 5, 9, 12, 16, 19, 25, 29, 35, 39 };
     unsigned _args[] = { 0, 0, (unsigned)false };
-    for (unsigned i = 3; i < SIZE(solutions); i++) {
+    for (unsigned i = std::max(3, start); i < SIZE(solutions); i++) {
         std::cout << "Size " << i << ":" << std::endl;
         _args[0] = i;
         _args[1] = solutions[i];
@@ -676,7 +708,7 @@ int main() {
     benchmark(nullptr, testFcts, testNames, 2);
     //testDistinctness();
     getch();
-
+    
     testNQueens();
     getch();*/
 
@@ -684,6 +716,14 @@ int main() {
     z3::set_param("smt.phase_selection", 5); // random
 
     testNQueens();
+    /*printResults();
+    getch();
+    getch();
+    getch();*/
+    /*getch();
+    testSingleNQueens();
+    printResults();
+    getch();*/
 
     //findOptimalSat();
     /*unsigned solutions[] = { 0, 0, 1, 3, 5, 9, 12, 16, 19, 25, 29, 35, 39 };
@@ -704,12 +744,13 @@ int main() {
     std::cout << "Done" << std::endl;
     getch();*/
 
-    getch();
-    testDisjointness();
+    //getch();
+    //testDisjointness();
+    z3::set_param("rewriter.blast_eq_value", false);
     //testSorting();
     getch();
 
-    unsigned _args[] = { 6, 1, (unsigned)false };
+    //unsigned _args[] = { 6, 1, (unsigned)false };
 
     // sorting2(_args);
     // sorting3(_args);
@@ -719,7 +760,7 @@ int main() {
     /*std::cout << "Optimal sorting network of size " << _args[0] << ": \n" << 
         opt_sorting(_args, Params(true, false, false, false, true, true, true, false, true))
     << std::endl;*/
-    findOptimalSat();
+    findOptimalSat(11);
     std::cout << "Done" << std::endl;
     getch();
     //testDistinctness();
@@ -763,9 +804,6 @@ int main() {
     // z3::set_param("smt.bv.eq_axioms", false);
 
     //getch();
-    testNQueens();
-    getch();
-
     testSorting();
 
     getch();
@@ -774,9 +812,10 @@ int main() {
     getch();
 
     //findAllOptimalSolutions(5);
-    //findOptimalSat();
-    findOptimalUnsat();
-    //getch();
+    findOptimalSat();
+    //findOptimalUnsat();
+    getch();
+    getch();
 
     exit(19);
     //sorting7(_args);

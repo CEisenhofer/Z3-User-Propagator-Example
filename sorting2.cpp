@@ -7,7 +7,7 @@ class SortedPropagator : public z3::user_propagator_base {
     std::unordered_map<z3::expr, uint64_t> model;
 
     unsigned funcValues = 0, inValues = 0, outValues = 0;
-    const z3::expr &func;
+    const z3::expr func;
     const z3::expr_vector &in;
     const z3::expr_vector &out;
 
@@ -113,9 +113,8 @@ public:
             for (unsigned i = 0; i < out.size(); i++) {
                 sorted.push_back(out[i] == ctx().bv_val(sortedValues[i], BIT_CNT));
             }
-            z3::expr_vector empty(ctx());
             // std::cout << "Prop: " << z3::implies(z3::mk_and(premiss), z3::mk_and(sorted)).to_string() << std::endl;
-            this->propagate(empty, z3::implies(z3::mk_and(premiss), z3::mk_and(sorted)));
+            this->propagate(in, z3::implies(z3::mk_and(premiss), z3::mk_and(sorted)));
         }
         else {
             assert(false);
@@ -181,6 +180,7 @@ int sorting2(unsigned size, sortingConstraints constraints) {
     applyConstraints(s, size, sort, constraints);
 
     z3::check_result result = s.check();
+    printStatistics(s);
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }

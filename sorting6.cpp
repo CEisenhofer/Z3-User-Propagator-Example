@@ -120,6 +120,7 @@ int sorting6(unsigned size, sortingConstraints constraints) {
 	applyConstraints(s, size, sort, constraints);
 
     z3::check_result result = s.check();
+    printStatistics(s);
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }

@@ -3,6 +3,27 @@
 
 #include "common.h"
 
+template<>
+struct std::hash<std::pair<z3::expr, z3::expr>> {
+    std::size_t operator()(const std::pair<z3::expr, z3::expr>& k) const noexcept {
+        return k.first.hash() ^ k.second.hash();
+    }
+};
+
+template<>
+struct std::equal_to<std::pair<z3::expr, z3::expr>> {
+    bool operator()(const std::pair<z3::expr, z3::expr>& lhs, const std::pair<z3::expr, z3::expr>& rhs) const {
+        return z3::eq(lhs.first, rhs.first) && z3::eq(lhs.second, rhs.second);
+    }
+};
+
+template<>
+struct std::hash<std::pair<std::pair<z3::expr, z3::expr>, z3::expr>> {
+    std::size_t operator()(const std::pair<std::pair<z3::expr, z3::expr>, z3::expr>& k) const noexcept {
+        return k.first.first.hash() ^ k.first.second.hash() ^ k.second.hash();
+    }
+};
+
 class LazySortingNetworkPropagator : public z3::user_propagator_base {
 
     std::stack<unsigned> prevFixedCnt;
@@ -14,7 +35,11 @@ class LazySortingNetworkPropagator : public z3::user_propagator_base {
     std::unordered_map<uint64_t, z3::expr> positionToAst;
 
     std::vector<z3::expr_vector> nodes;
-    z3::expr_vector empty;
+    z3::expr_vector jstfc;
+
+    std::unordered_map<std::pair<z3::expr, z3::expr>, z3::expr> alreadyGeneratedForwardLemmas;
+    std::unordered_map<std::pair<z3::expr, z3::expr>, z3::expr> alreadyGeneratedBackwardLemmas;
+    //std::unordered_map<std::pair<std::pair<z3::expr, z3::expr>, z3::expr>, z3::expr> alreadyGeneratedBackwardLemmas;
 
     std::vector<std::pair<int, const z3::expr>> instantiations;
     std::vector<std::pair<int, const z3::expr>> registrations;
@@ -112,7 +137,7 @@ class LazySortingNetworkPropagator : public z3::user_propagator_base {
         if (reg)
             user_propagator_base::add(e);
         else 
-            user_propagator_base::propagate(empty, e);
+            user_propagator_base::propagate(jstfc, e);
 
         if (!guessRatherThanPropagate || force)
             return;
@@ -125,18 +150,44 @@ class LazySortingNetworkPropagator : public z3::user_propagator_base {
         alreadyConsidered.insert(e);
     }
 
+    z3::expr getForwardLemma(const z3::expr& in1, const z3::expr& in2, const z3::expr& out1, const z3::expr& out2) {
+        std::pair<z3::expr, z3::expr> p = std::make_pair(in1, in2);
+        auto it = alreadyGeneratedForwardLemmas.find(p);
+        if (it != alreadyGeneratedForwardLemmas.end()) {
+            return it->second;
+        }
+        z3::expr e = z3::ite(z3::ule(in1, in2),
+            out1 == in1 && out2 == in2,
+            out1 == in2 && out2 == in1);
+        alreadyGeneratedForwardLemmas.emplace(p, e);
+        return e;
+    }
+
+    z3::expr getBackwardLemma(const z3::expr& in1, const z3::expr& in2, const z3::expr& out, bool inv) {
+        std::pair<z3::expr, z3::expr> p = std::make_pair(in1, in2);
+        auto it = alreadyGeneratedBackwardLemmas.find(p);
+        if (it != alreadyGeneratedBackwardLemmas.end()) {
+            return it->second;
+        }
+        z3::expr e = z3::ite(z3::ule(in1, in2),
+            out == (inv ? in1 : in2),
+            out == (inv ? in2 : in1));
+        alreadyGeneratedBackwardLemmas.emplace(p, e);
+        return e;
+    }
+
 public:
 
-    LazySortingNetworkPropagator(z3::solver* s, unsigned bvSize, bool guessRatherThanPropagate) :
-        user_propagator_base(s), network(0), empty(ctx()), bvSize(bvSize),
-        guessRatherThanPropagate(guessRatherThanPropagate), rng(rd()), idist(0, 0), bdist(), next((uint64_t)-1) {
+    LazySortingNetworkPropagator(z3::solver* s, unsigned bvSize, bool persistent) :
+        user_propagator_base(s), network(0), jstfc(ctx()), bvSize(bvSize),
+        guessRatherThanPropagate(persistent), rng(rd()), idist(0, 0), bdist(), next((uint64_t)-1) {
 
         assert(forward || backward);
 
         this->register_fixed();
 
-        if (guessRatherThanPropagate)
-            this->register_decide();
+        /*if (persistent)
+            this->register_decide();*/
     }
 
     void addInputOutput(const symbolicNetwork& network, const z3::expr_vector& inputs, const z3::expr_vector& outputs) {
@@ -230,8 +281,8 @@ public:
         /*if (guessRatherThanPropagate)
             return;*/
 
-        if (next == p)
-            setNext();
+        /*if (next == p)
+            setNext();*/
 
         if (bit != (unsigned short)-1)
             return;
@@ -257,41 +308,28 @@ public:
                 if (destination.position + 1 <= nodes[destination.line].size())
                     addAndBits(siblingNextAst);
 
-                if (val == siblingVal || ((line < destination.line) == (val < siblingVal))) {
+                /*if (val == siblingVal || ((line < destination.line) == (val < siblingVal))) {
                     // already ordered correctly
-                    unsigned o1, o2;
-                    /*if (!guessRatherThanPropagate || 
-                        (getModelValue(nextAstPos, o1) && getModelValue(siblingNextAst, o2) &&
-                            (line <= destination.line 
-                                ? !(val == o1 && siblingVal == o2)
-                                : !(val == o2 && siblingVal == o1)))) {*/
                         // simply pass them through
-                        if (line <= destination.line) {
-                            const z3::expr pr = z3::implies(z3::ule(ast, siblingAst), nextAst == ast && siblingNextAst == siblingAst);
-                            this->propagate(pr, false);
-                        }
-                        else {
-                            const z3::expr pr = z3::implies(z3::ule(siblingAst, ast), nextAst == ast && siblingNextAst == siblingAst);
-                            this->propagate(pr, false);
-                        }
-                    //}
-                }
-                else {
-                    // not ordered correctly
-                    // add if-then-else
                     if (line <= destination.line) {
-                        const z3::expr pr = z3::ite(z3::ule(ast, siblingAst),
-                            nextAst == ast && siblingNextAst == siblingAst,
-                            nextAst == siblingAst && siblingNextAst == ast);
+                        const z3::expr pr = z3::implies(z3::ule(ast, siblingAst), nextAst == ast && siblingNextAst == siblingAst);
                         this->propagate(pr, false);
                     }
                     else {
-                        const z3::expr pr = z3::ite(z3::ule(siblingAst, ast),
-                            nextAst == ast && siblingNextAst == siblingAst,
-                            nextAst == siblingAst && siblingNextAst == ast);
+                        const z3::expr pr = z3::implies(z3::ule(siblingAst, ast), nextAst == ast && siblingNextAst == siblingAst);
                         this->propagate(pr, false);
                     }
                 }
+                else {*/
+                    // not ordered correctly
+                    // add if-then-else
+                if (line <= destination.line) {
+                    this->propagate(getForwardLemma(ast, siblingAst, nextAst, siblingNextAst), false);
+                }
+                else {
+                    this->propagate(getForwardLemma(siblingAst, ast, siblingNextAst, nextAst), false);
+                }
+                //}
             }
         }
         if (pos > 0) { // not an input
@@ -306,9 +344,7 @@ public:
             if (destination.position > 0)
                 addAndBits(prevSiblingAst);
 
-            this->propagate(z3::ite(z3::ule(prevAst, prevSiblingAst),
-                ast == (line < destination.line ? prevAst : prevSiblingAst),
-                ast == (line < destination.line ? prevSiblingAst : prevAst)), false);
+            this->propagate(getBackwardLemma(prevAst, prevSiblingAst, ast, line <= destination.line), false);
         }
     }
 

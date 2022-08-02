@@ -14,7 +14,9 @@ protected:
 
     const unsigned board;
     const bool allSat;
+    const int sol = -1;
 
+    int decisionLevel = 0;
     int solutionNr = 1;
 
 public:
@@ -24,7 +26,7 @@ public:
     }
 
     void final() override {
-        if (!allSat)
+        if (!allSat || solutionNr > sol)
             return;
         this->conflict(fixedVariables);
         if (modelSet.find(currentModel) != modelSet.end()) {
@@ -65,8 +67,8 @@ public:
         }
     }
 
-    user_propagator(z3::solver *s, const z3::expr_vector& queens, unsigned board, bool allSat)
-            : user_propagator_base(s), currentModel(queens.size(), (unsigned)-1), fixedVariables(s->ctx()), board(board), allSat(allSat) {
+    user_propagator(z3::solver *s, const z3::expr_vector& queens, unsigned board, bool allSat, int sol)
+            : user_propagator_base(s), currentModel(queens.size(), (unsigned)-1), fixedVariables(s->ctx()), board(board), allSat(allSat), sol(sol) {
 
         this->register_fixed();
         this->register_final();
@@ -81,11 +83,15 @@ public:
 
     void push() override {
         fixedCnt.push((unsigned)fixedVariables.size());
+        decisionLevel++;
     }
 
     virtual void unset(const z3::expr& ast) { }
 
+    virtual void unsetLast(bool any) {}
+
     void pop(unsigned num_scopes) override {
+        bool any = false;
         for (unsigned i = 0; i < num_scopes; i++) {
             unsigned lastCnt = fixedCnt.top();
             fixedCnt.pop();
@@ -93,9 +99,13 @@ public:
             for (unsigned j = fixedVariables.size(); j > lastCnt; j--) {
                 unset(fixedVariables[j - 1]);
                 currentModel[exprToId[fixedVariables[j - 1]]] = (unsigned)-1;
+                any = true;
             }
             fixedVariables.resize(lastCnt);
         }
+        decisionLevel -= (int)num_scopes;
+        assert(decisionLevel >= 0);
+        unsetLast(any);
     }
 
     user_propagator_base *fresh(z3::context &) override {

@@ -1,7 +1,7 @@
 #include "LazySortingNetworkPropagator.h"
 
 
-int sorting8(unsigned size, sortingConstraints constraints, bool guess) {
+int sorting8(unsigned size, sortingConstraints constraints, bool persistent) {
     z3::context context;
     z3::solver s(context, z3::solver::simple());
 
@@ -27,13 +27,14 @@ int sorting8(unsigned size, sortingConstraints constraints, bool guess) {
         }
     };
 
-    LazySortingNetworkPropagator propagator(&s, BIT_CNT, guess);
+    LazySortingNetworkPropagator propagator(&s, BIT_CNT, persistent);
     sort sort(&propagator);
 
     applyConstraints(s, size, sort, constraints);
 
 
     z3::check_result result = s.check();
+    printStatistics(s);
     if (constraints & outputReverse) {
         assert(result == z3::unsat);
     }

@@ -11,7 +11,7 @@ class user_propagator_subquery_maximisation : public user_propagator {
 public:
 
     user_propagator_subquery_maximisation(z3::solver *s, unsigned board, const z3::expr_vector& queens)
-            : user_propagator(s, queens, board, false),
+            : user_propagator(s, queens, board, false, -1),
               assertion(mk_and(s->assertions())),
               queens(queens), manhattanSum(s->ctx().bv_val(0, queens[0].get_sort().bv_size())) {
 
