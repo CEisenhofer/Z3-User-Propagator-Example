@@ -14,12 +14,12 @@ char getch() {
     tcgetattr(0, &old);
     current = old;
     current.c_lflag &= ~ICANON;
-    if (echo) {
+    //if (echo) {
         current.c_lflag |= ECHO;
-    }
+    /*}
     else {
         current.c_lflag &= ~ECHO;
-    }
+    }*/
     tcsetattr(0, TCSANOW, &current);
     ch = getchar();
     tcsetattr(0, TCSANOW, &old);
@@ -616,15 +616,15 @@ const std::initializer_list<benchark_fct> optSortingFcts = {
     //[](unsigned a[]) { return opt_sorting(a, Params(false, false, false, false, false, false, false, false, false, None)); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, MinimalModel)); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, CompleteModel)); },
-    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(MinimalModel | Repropagate))); },
-    [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(CompleteModel | Repropagate))); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(MinimalModel | Repropagate))); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(CompleteModel | Repropagate))); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(NearlyCompleteModel | Repropagate))); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(MinimalModel | CompleteModel | Repropagate))); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(CompleteModel | Restart | Repropagate))); },
     [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, (InstantiationStrategy)(Randomized))); },
     [](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , false, false, false, None)); },
-    [](unsigned a[]) { return opt_sorting(a, Params(true , true , false, true , false, false, false, None)); },
-    [](unsigned a[]) { return opt_sorting(a, Params(true , true , true , true , false, false, false, None)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , true , false, true , false, false, false, None)); },
+    //[](unsigned a[]) { return opt_sorting(a, Params(true , true , true , true , false, false, false, None)); },
     [](unsigned a[]) { return opt_sorting(a, Params(true , true , true , true , false, false, false, CompleteModel)); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , true , false, false, false, false, None)); },
     //[](unsigned a[]) { return opt_sorting(a, Params(true , false, false, true , true , true , false, false, false, None)); },
@@ -634,15 +634,15 @@ const std::initializer_list<const char*> optSortingNames = {
     //"Nothing",
     //"Adjacent + Simulated Quantifier + Minimal Model",
     //"Adjacent + Simulated Quantifier + Complete Model",
-    // "Adjacent + Simulated Quantifier + Minimal Model (Rep)",
-    // "Adjacent + Simulated Quantifier + Complete Model (Rep)",
+    //"Adjacent + Simulated Quantifier + Minimal Model (Rep)",
+    //"Adjacent + Simulated Quantifier + Complete Model (Rep)",
     //"Adjacent + Simulated Quantifier + Nearly Complete Model",
     //"Adjacent + Simulated Quantifier + Complete/Minimal Model",
     //"Adjacent + Simulated Quantifier + Complete Model + Restart",
-    // "Adjacent + Randomized",
-    // "Adjacent",
-    // "Adjacent + Decide",
-    // "Adjacent + Decide + Occurrence",
+    "Adjacent + Randomized",
+    "Adjacent",
+    //"Adjacent + Decide",
+    //"Adjacent + Decide + Occurrence",
     "Adjacent + Decide + Occurrence + Complete Model",
     //"Adjacent + Connected",
     //"Adjacent + Connected (All)",
@@ -715,7 +715,8 @@ int main() {
     z3::set_param("rewriter.blast_eq_value", true);
     z3::set_param("smt.phase_selection", 5); // random
 
-    testNQueens();
+    //testNQueens();
+
     /*printResults();
     getch();
     getch();
@@ -748,7 +749,7 @@ int main() {
     //testDisjointness();
     z3::set_param("rewriter.blast_eq_value", false);
     //testSorting();
-    getch();
+    //getch();
 
     //unsigned _args[] = { 6, 1, (unsigned)false };
 
@@ -760,7 +761,7 @@ int main() {
     /*std::cout << "Optimal sorting network of size " << _args[0] << ": \n" << 
         opt_sorting(_args, Params(true, false, false, false, true, true, true, false, true))
     << std::endl;*/
-    findOptimalSat(11);
+    findOptimalSat(5);
     std::cout << "Done" << std::endl;
     getch();
     //testDistinctness();
